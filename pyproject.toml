@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hdl-repair"
+version = "0.1.0"
+description = "Automatic repair of LLM-generated HDL for synthesizability (PAIR-style loop)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "huggingface_hub>=1.0",
+    "python-dotenv>=1.0",
+    "pandas>=2.0",
+]
+
+[project.scripts]
+hdl-repair = "hdl_repair.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
