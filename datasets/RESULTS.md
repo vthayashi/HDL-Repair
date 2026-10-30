@@ -202,6 +202,7 @@ PYTHONPATH=src python tools/sanity_check.py      # writes runs/sanity_check_gold
 PYTHONPATH=src python tools/run_dataset.py --csv datasets/AES_defective_examples.csv \
     --max-iter 3 --out datasets/results.csv \
     --codes-out datasets/AES_repaired_examples.csv
+python tools/summarize_runs.py --results datasets/results.csv --out datasets/iterations.csv
 ```
 
 LLM outputs are sampled (temperature 0.2), so individual repairs can differ

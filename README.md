@@ -106,9 +106,13 @@ PYTHONPATH=src python tools/run_dataset.py \
 
 # full repair loop
 PYTHONPATH=src python tools/run_dataset.py \
-    --csv datasets/AES_defective_examples.csv --max-iter 3 \
-    --codes-out datasets/AES_repaired_examples.csv
+    --csv datasets/AES_defective_examples.csv --max-iter 3
 ```
+
+Results go to `runs/dataset_results.csv` and the repaired RTL to
+`runs/dataset_results_codes.csv`; pass `--out` / `--codes-out` to write elsewhere
+(see [`datasets/RESULTS.md`](datasets/RESULTS.md) for the command that regenerates
+the published results).
 
 Sanity-check the synthesis flow on the untouched golden design:
 

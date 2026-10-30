@@ -43,11 +43,15 @@ def main() -> int:
     ap.add_argument("--max-iter", type=int, default=3)
     ap.add_argument("--limit", type=int, default=0, help="only run first N rows (0 = all)")
     ap.add_argument("--no-llm", action="store_true", help="disable repair (detection only)")
-    ap.add_argument("--out", type=Path, default=ROOT / "datasets" / "results.csv")
-    ap.add_argument("--codes-out", type=Path,
-                    default=ROOT / "datasets" / "AES_repaired_examples.csv",
-                    help="CSV with the repaired RTL of each example (for replication)")
+    # defaults stay in runs/ (git-ignored) so a test run never overwrites the
+    # published results in datasets/; pass --out/--codes-out to update those
+    ap.add_argument("--out", type=Path, default=ROOT / "runs" / "dataset_results.csv")
+    ap.add_argument("--codes-out", type=Path, default=None,
+                    help="CSV with the repaired RTL of each example, for replication "
+                         "(default: <out>_codes.csv next to --out)")
     args = ap.parse_args()
+    if args.codes_out is None:
+        args.codes_out = args.out.with_name(f"{args.out.stem}_codes.csv")
 
     rows = load_rows(args.csv)
     if args.limit:

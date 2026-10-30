@@ -81,7 +81,7 @@ Run the dataset in ingest-only mode; iteration 1 already runs the synthesis gate
 ```bash
 PYTHONPATH=src python tools/run_dataset.py \
     --csv datasets/AES_defective_examples.csv \
-    --no-llm --max-iter 1 --out datasets/results_yosys_check.csv
+    --no-llm --max-iter 1 --out runs/results_yosys_check.csv
 ```
 
 Expected: `synth_verified` is `True` for every row (the gate ran), and the
