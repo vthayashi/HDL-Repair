@@ -1,103 +1,175 @@
 # HDL-Repair
 
-Ferramenta de **reparo automático de HDL gerado por LLM** para torná-lo
-**sintetizável** e **funcionalmente equivalente** a um modelo-base (golden),
-usando um loop iterativo no estilo **PAIR** (ingerir → testar → analisar → reparar).
+**Automatic repair of LLM-generated HDL** so that it becomes **synthesizable** and
+**functionally equivalent** to a reference (golden) design, using an iterative
+**PAIR-style** loop: *ingest → test → analyze → repair*.
 
-Projeto de TCC (USP). Reaproveita o motor PAIR do AHA! Challenge 2026
-(`../AHA_Challenge_2026/Notebook/pair.ipynb`), re-enquadrando os papéis de
-geração de trojan para **reparo para síntese**: sem CVSS, stealth ou payload.
+## Motivation
 
-## Motivação
+Recent work (arXiv:2603.11287, *Synthesis-in-the-Loop Evaluation of LLMs for RTL*)
+shows that LLM-generated HDL is frequently not synthesizable. That evaluation is
+limited to **single-turn, zero-shot** generation and leaves **iterative refinement
+with synthesis feedback** as future work.
 
-O trabalho de referência (arXiv:2603.11287, *Synthesis-in-the-Loop Evaluation of
-LLMs for RTL*) mostra que HDL gerado por LLM frequentemente não é sintetizável, e
-avalia modelos em geração **single-turn, zero-shot** — deixando **refinamento
-iterativo com feedback de síntese como trabalho futuro**. Esta ferramenta preenche
-essa lacuna e vai além: atua em fluxos com **implementação-base** (legado,
-manutenção, otimização), reparando a versão nova (feita com auxílio de LLM) até
-que ela seja sintetizável e equivalente à base.
+HDL-Repair addresses this gap and targets a common industrial setting: flows that
+already have a **base implementation** (legacy code, maintenance, optimization).
+A new, LLM-assisted version of a module is repaired until it is both
+synthesizable and equivalent to the base design.
 
-## Como funciona
+## How it works
 
-Para cada execução, dado um arquivo RTL de entrada e um design golden:
+For each run, given an input RTL file and a golden design:
 
-1. **Ingestão** (iteração 1): o HDL de entrada é avaliado como está — sem chamar LLM.
-2. **Gates** (a cada iteração):
-   - *Compilação* — `iverilog` compila o design com o candidato no lugar do
-     arquivo-alvo (a árvore golden nunca é modificada).
-   - *Sintetizabilidade* — `yosys` elabora e mapeia para a biblioteca sky130
-     (opcional; se o Yosys não estiver instalado, o gate é marcado como não
-     verificado e não bloqueia o loop).
-   - *Equivalência* — o testbench do golden (`tb_aes`) precisa passar.
-3. **Analista** (quando algum gate falha): classifica o erro pela taxonomia do
-   paper (sintaxe tardia, módulo indefinido, construto não-sintetizável, task
-   só-de-simulação, aninhamento inválido) e emite ações de reparo — via LLM
-   (DeepSeek-R1) ou determinístico se o LLM não estiver disponível.
-4. **Reparador** (DeepSeek-V3): reescreve o módulo aplicando as ações, preservando
-   interface e semântica de reset.
-5. **Parada**: quando compila + sintetiza + equivale (ACCEPT), ou ao atingir
-   `MAX_ITERATIONS`/orçamento de tokens.
+1. **Ingest** (iteration 1): the input HDL is evaluated as-is, with no LLM call.
+2. **Gates** (every iteration):
+   - *Compilation* — `iverilog` compiles the design with the candidate replacing
+     the target file. The golden tree is never modified.
+   - *Synthesizability* — `yosys` elaborates the design and maps it to the
+     sky130 standard-cell library. Optional: if Yosys is not installed, the gate
+     is reported as *unverified* and does not block the loop.
+   - *Equivalence* — the golden testbench (`tb_aes`) must pass.
+3. **Analyst** (when a gate fails): classifies the failure using the taxonomy from
+   the reference paper (late syntax error, undefined module, non-synthesizable
+   construct, simulation-only task, invalid nesting) and emits concrete repair
+   actions — via an LLM (DeepSeek-R1 by default), or deterministically when no
+   LLM is available.
+4. **Repairer** (DeepSeek-V3 by default): rewrites the module applying those
+   actions while preserving the interface and reset semantics.
+5. **Stop**: when the candidate compiles, synthesizes and is equivalent (ACCEPT),
+   or when `MAX_ITERATIONS` / the token budget is reached.
 
-Artefatos por execução em `runs/run_<timestamp>/`: `iter_NN/`,
-`repair_iterations.jsonl`, `repair_iterations.md`, `repair_summary.json` e
-`repaired/<arquivo>.v` (melhor candidato).
-
-## Instalação
-
-```bash
-python -m venv .venv && . .venv/Scripts/activate   # Windows (Git Bash)
-pip install -r requirements.txt
-cp .env.example .env            # preencha HF_TOKEN
+```
+          ┌──────────┐   pass   ┌────────┐
+input ──▶ │  gates   │ ───────▶ │ ACCEPT │
+          └────┬─────┘          └────────┘
+               │ fail
+               ▼
+          ┌──────────┐  actions ┌──────────┐
+          │ analyst  │ ───────▶ │ repairer │ ──▶ next iteration
+          └──────────┘          └──────────┘
 ```
 
+Each run writes its artifacts to `runs/run_<timestamp>/`: one `iter_NN/` folder per
+iteration (logs, Yosys script, area report, netlist), `repair_iterations.jsonl`,
+`repair_iterations.md`, `repair_summary.json`, and `repaired/<file>.v` (best
+candidate).
+
+## Installation
+
+Requires **Python 3.10+**.
+
 ```bash
-python -m venv venv
-source venv/bin/activate   # Linux
-pip install -r requirements.txt
-source .env
+python -m venv .venv
+source .venv/bin/activate          # Windows (Git Bash): . .venv/Scripts/activate
+pip install -e .                   # or: pip install -r requirements.txt
+cp .env.example .env               # then set HF_TOKEN
 ```
 
-Ferramentas externas esperadas no PATH:
-- `iverilog` + `vvp` — compilação e simulação (obrigatório p/ os gates de
-  compilação e equivalência).
-- `yosys` — gate de sintetizabilidade e área (opcional; instale via OSS CAD Suite
-  ou `../AHA_Challenge_2026/setupEnv.sh`). Sem ele, a síntese não é verificada.
-- `sta` (OpenSTA) — timing/slack (opcional).
+External tools expected on `PATH`:
 
-O golden `secworks/aes` é clonado em `golden/aes/`. A Liberty sky130 (13 MB) é
-reutilizada da pasta do AHA por padrão; veja `SKY130_LIB` em `.env.example`.
+| Tool | Purpose | Required |
+|---|---|---|
+| `iverilog` + `vvp` | compilation and simulation (compile + equivalence gates) | yes |
+| `yosys` | synthesizability gate, area and cell count | optional |
+| `sta` (OpenSTA) | timing / slack | optional |
 
-## Uso
+All three are available in the [OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build).
+
+The golden model ([secworks/aes](https://github.com/secworks/aes)) is vendored in
+`golden/aes/`, and the sky130 Liberty file
+(`sky130_fd_sc_hd__tt_025C_1v80.lib`, ~13 MB) in `lib/`. Use `SKY130_LIB` in `.env`
+to point at a different copy.
+
+## Usage
 
 ```bash
-python -m hdl_repair --input cases/aes/minha_versao_llm.v
-# alvo inferido pelo nome do módulo; ou explícito:
+# repair a single file (target module inferred from the module name)
+python -m hdl_repair --input cases/aes/defect_aes_key_mem.v
+
+# explicit target and iteration budget
 python -m hdl_repair --input X.v --target-rtl aes_core.v --max-iter 8
-# sem o gate de síntese (apenas compila + equivalência):
+
+# skip the synthesis gate (compile + equivalence only)
 python -m hdl_repair --input X.v --no-synth
 ```
 
-## Estrutura
+Batch evaluation over a dataset:
+
+```bash
+# detection only (no LLM): runs every gate once per example
+PYTHONPATH=src python tools/run_dataset.py \
+    --csv datasets/AES_defective_examples.csv --no-llm --max-iter 1
+
+# full repair loop
+PYTHONPATH=src python tools/run_dataset.py \
+    --csv datasets/AES_defective_examples.csv --max-iter 3 \
+    --codes-out datasets/AES_repaired_examples.csv
+```
+
+Sanity-check the synthesis flow on the untouched golden design:
+
+```bash
+PYTHONPATH=src python tools/sanity_check.py
+```
+
+## Configuration
+
+All settings are read from `.env` (or the process environment). See
+[`.env.example`](.env.example) for the full list; the most relevant are:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `HF_TOKEN` | — | Hugging Face token (Inference Router) for the LLM roles |
+| `HF_MODEL_REPAIRER` / `HF_MODEL_ANALYST` | DeepSeek-V3 / DeepSeek-R1 | models per role |
+| `MAX_ITERATIONS` | `8` | repair iterations per run |
+| `MAX_TOTAL_TOKENS_EST` | `120000` | token budget per run |
+| `RUN_SYNTHESIS` | `1` | enable the Yosys gate |
+| `SKY130_LIB` | `lib/sky130_fd_sc_hd__tt_025C_1v80.lib` | Liberty file |
+| `BASELINE_AREA_REPORT` / `BASELINE_STA_REPORT` | — | golden PPA reports for area-overhead scoring |
+
+## Repository layout
 
 ```
 src/hdl_repair/
   config.py      # DesignSpec, RepairConfig, aes_design()
-  llm_client.py  # wrapper HF Inference Router (hf_chat reusado)
-  rtl_io.py      # extração/validação de RTL
-  gates.py       # compilação + equivalência + taxonomia de erros
-  synthesis.py   # gate de sintetizabilidade (Yosys) + PPA
-  analyst.py     # diagnóstico -> ações de reparo
-  repairer.py    # reparo via LLM
-  scoring.py     # score de reparo/qualidade
-  pipeline.py    # loop orquestrador + logging
-  cli.py         # CLI
-golden/aes/      # clone do secworks/aes (referência limpa)
-cases/aes/       # HDLs de entrada a reparar
-runs/            # artefatos por execução
+  llm_client.py  # Hugging Face Inference Router client (retry/backoff)
+  rtl_io.py      # RTL extraction and structural validation
+  gates.py       # compile + equivalence gates, error taxonomy
+  synthesis.py   # synthesizability gate (Yosys) + PPA parsing
+  analyst.py     # diagnosis -> repair actions
+  repairer.py    # LLM-based repair
+  scoring.py     # repair quality score
+  pipeline.py    # orchestration loop + logging
+  cli.py         # command-line interface
+tools/
+  make_aes_dataset.py  # builds the defective-AES dataset (injected defects)
+  run_dataset.py       # batch runner over a dataset CSV
+  sanity_check.py      # Yosys + OpenSTA on the clean golden model
+datasets/        # input dataset, results and repaired code (see RESULTS.md)
+examples/        # selected input/output RTL files (see docs/synthesis_gate.md)
+cases/aes/       # sample input files to repair
+golden/aes/      # secworks/aes reference design
+lib/             # sky130 Liberty file
+docs/            # additional documentation
+runs/            # per-run artifacts (git-ignored)
 ```
 
-## Escopo
+## Results
 
-v1: estudo de caso **AES** (clássico). A arquitetura é agnóstica ao design
-(`DesignSpec`); PQC (ex. Kyber) e integração com Vivado/FPGA são próximos passos.
+On 12 defective AES variants covering the five defect categories, the loop
+repaired 8 of the 9 defects detectable by compilation/simulation alone. The
+remaining 3 compile and pass the testbench but contain non-synthesizable or
+simulation-only constructs; they are the target of the synthesis gate. See
+[`datasets/RESULTS.md`](datasets/RESULTS.md) for details and reproduction steps.
+
+## Scope and next steps
+
+- v1 case study: **AES**. The architecture is design-agnostic (`DesignSpec`), so
+  adding a design means describing its RTL files, testbench and top module.
+- Planned: post-quantum designs (e.g. Kyber), FPGA flows (Vivado), and timing-aware
+  scoring with OpenSTA.
+
+## License
+
+GPL-3.0 — see [`LICENSE`](LICENSE). The vendored `golden/aes` design and the sky130
+Liberty file keep their original licenses.

@@ -1,4 +1,4 @@
-"""Synthesizability analyst — re-framed from the AHA security judge.
+"""Synthesizability analyst.
 
 Given the candidate RTL and the combined compile/synthesis/simulation logs, the
 analyst produces a structured verdict and concrete, synthesis-oriented repair

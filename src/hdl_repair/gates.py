@@ -152,7 +152,7 @@ def run_equivalence_gate(rtl_paths: list[Path], tb_path: Path, work_dir: Path,
                          timeout_sec: int = 600, backend: str = "auto") -> GateResult:
     """Compile + simulate the design against the golden testbench.
 
-    ``backend`` is kept for parity with the AHA flow; fusesoc is not required for
-    this tool and iverilog is used directly (the golden tree is untouched).
+    ``backend`` is accepted for API compatibility; fusesoc is not required and
+    iverilog is used directly (the golden tree is untouched).
     """
     return _simulate_iverilog(rtl_paths, tb_path, work_dir, timeout_sec)

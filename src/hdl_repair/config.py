@@ -21,19 +21,12 @@ GOLDEN_DIR = PROJECT_ROOT / "golden"
 RUNS_DIR = PROJECT_ROOT / "runs"
 CASES_DIR = PROJECT_ROOT / "cases"
 
-# Default sky130 Liberty: reuse the copy already present from the AHA challenge
-# (13 MB; not duplicated here). Override with SKY130_LIB in .env.
-_AHA_LIB = (
-    PROJECT_ROOT.parent
-    / "AHA_Challenge_2026"
-    / "aes"
-    / "aes_synth"
-    / "sky130_fd_sc_hd__tt_025C_1v80.lib"
-)
+# Default sky130 Liberty shipped in lib/ (~13 MB). Override with SKY130_LIB in .env.
+DEFAULT_SKY130_LIB = PROJECT_ROOT / "lib" / "sky130_fd_sc_hd__tt_025C_1v80.lib"
 
 
 def load_env_file(env_path: Path) -> dict[str, str]:
-    """Minimal .env parser (reused from the AHA notebook)."""
+    """Minimal .env parser (KEY=VALUE lines, ``#`` comments, optional quotes)."""
     values: dict[str, str] = {}
     if not env_path.exists():
         return values
@@ -72,7 +65,7 @@ class DesignSpec:
 class RepairConfig:
     """Loop + LLM + tool configuration."""
 
-    # LLM (HuggingFace Inference Router, reused from the AHA notebook)
+    # LLM (HuggingFace Inference Router)
     hf_token: Optional[str] = None
     hf_base_url: str = "https://router.huggingface.co/v1"
     hf_provider: str = "auto"
@@ -165,9 +158,12 @@ def aes_design(target_rtl: str = "aes_key_mem.v") -> DesignSpec:
         "aes_decipher_block.v",
     ]
     env = load_env_file(PROJECT_ROOT / ".env")
-    lib_override = env.get("SKY130_LIB") or os.environ.get("SKY130_LIB")
-    liberty = Path(lib_override) if lib_override else _AHA_LIB
-    aha_synth = PROJECT_ROOT.parent / "AHA_Challenge_2026" / "aes" / "aes_synth"
+
+    def opt_path(key: str) -> Optional[Path]:
+        val = env.get(key) or os.environ.get(key)
+        return Path(val) if val else None
+
+    liberty = opt_path("SKY130_LIB") or DEFAULT_SKY130_LIB
     return DesignSpec(
         name="aes",
         rtl_dir=rtl_dir,
@@ -177,6 +173,7 @@ def aes_design(target_rtl: str = "aes_key_mem.v") -> DesignSpec:
         tb_top_module="tb_aes",
         target_rtl=target_rtl,
         liberty=liberty if liberty.exists() else None,
-        baseline_area_report=(aha_synth / "original_metrics" / "area_report.txt"),
-        baseline_sta_report=(aha_synth / "original_metrics" / "clean_sta_report.txt"),
+        # golden PPA reports (Yosys `stat` / OpenSTA) used for area-overhead scoring
+        baseline_area_report=opt_path("BASELINE_AREA_REPORT"),
+        baseline_sta_report=opt_path("BASELINE_STA_REPORT"),
     )

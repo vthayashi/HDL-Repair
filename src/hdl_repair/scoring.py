@@ -1,8 +1,8 @@
-"""Repair quality score — re-framed from the AHA composite score.
+"""Repair quality score.
 
-No CVSS/stealth. The score rewards passing the three gates and penalizes area
+The score rewards passing the three gates and penalizes area
 overhead vs the golden baseline, giving a single comparable number per iteration
-for ranking the best candidate and for the dissertation's quantitative tables.
+for ranking the best candidate and for reporting results.
 
     score = 40*compile_ok + 30*synth_ok + 30*equiv_ok - overhead_penalty
     overhead_penalty = clamp(area_overhead_pct, 0, 30)   # only when synthesizable

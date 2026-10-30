@@ -1,5 +1,5 @@
 Design,Defect_Category,Defect_Id,Detectable_Without_Yosys,Status,Accepted,Final_Compile_OK,Final_Equiv_Pass,Area,Cells,Slack,Iterations,Tokens,Defective_Code,Repaired_Code
-/content/aes/src/rtl/aes_sbox.v,late-syntax-error,syntax_bad_lvalue,True,nao reparado,False,False,False,,,,1,0,"//======================================================================
+/content/aes/src/rtl/aes_sbox.v,late-syntax-error,syntax_bad_lvalue,True,not repaired,False,False,False,,,,1,0,"//======================================================================
 //
 // aes_sbox.v
 // ----------
@@ -656,7 +656,7 @@ endmodule // aes_sbox
 // EOF aes_sbox.v
 //======================================================================
 "
-/content/aes/src/rtl/aes_inv_sbox.v,late-syntax-error,syntax_stray_token,True,nao reparado,False,False,False,,,,1,0,"//======================================================================
+/content/aes/src/rtl/aes_inv_sbox.v,late-syntax-error,syntax_stray_token,True,not repaired,False,False,False,,,,1,0,"//======================================================================
 //
 // aes_inv_sbox.v
 // --------------
@@ -1309,7 +1309,7 @@ endmodule // aes_inv_sbox
 // EOF aes_inv_sbox.v
 //======================================================================
 "
-/content/aes/src/rtl/aes_key_mem.v,undefined-module,undefined_module,True,nao reparado,False,False,False,,,,1,0,"//======================================================================
+/content/aes/src/rtl/aes_key_mem.v,undefined-module,undefined_module,True,not repaired,False,False,False,,,,1,0,"//======================================================================
 //
 // aes_key_mem.v
 // -------------
@@ -2180,7 +2180,7 @@ endmodule // aes_key_mem
 // EOF aes_key_mem.v
 //======================================================================
 "
-/content/aes/src/rtl/aes_core.v,undefined-module,undefined_signal,True,nao reparado,False,False,False,,,,1,0,"//======================================================================
+/content/aes/src/rtl/aes_core.v,undefined-module,undefined_signal,True,not repaired,False,False,False,,,,1,0,"//======================================================================
 //
 // aes_core.v
 // ----------
@@ -2869,7 +2869,7 @@ endmodule // aes_core
 // EOF aes_core.v
 //======================================================================
 "
-/content/aes/src/rtl/aes.v,non-synthesizable-construct,finish_in_dut,True,"compilou, mas nao-equivalente",False,True,False,,,,1,0,"//======================================================================
+/content/aes/src/rtl/aes.v,non-synthesizable-construct,finish_in_dut,True,"compiles, but not equivalent",False,True,False,,,,1,0,"//======================================================================
 //
 // aes.v
 // --------
@@ -3424,7 +3424,7 @@ endmodule // aes
 // EOF aes.v
 //======================================================================
 "
-/content/aes/src/rtl/aes_encipher_block.v,non-synthesizable-construct,initial_block_nonsynth,False,needs-yosys (passou gates atuais),False,True,True,,,,1,0,"//======================================================================
+/content/aes/src/rtl/aes_encipher_block.v,non-synthesizable-construct,initial_block_nonsynth,False,needs-yosys (passes compile + equivalence gates),False,True,True,,,,1,0,"//======================================================================
 //
 // aes_encipher_block.v
 // --------------------
@@ -4407,7 +4407,7 @@ endmodule // aes_encipher_block
 // EOF aes_encipher_block.v
 //======================================================================
 "
-/content/aes/src/rtl/aes_decipher_block.v,late-syntax-error,missing_endmodule,True,nao reparado,False,False,False,,,,1,0,"//======================================================================
+/content/aes/src/rtl/aes_decipher_block.v,late-syntax-error,missing_endmodule,True,not repaired,False,False,False,,,,1,0,"//======================================================================
 //
 // aes_decipher_block.v
 // --------------------
@@ -5460,7 +5460,7 @@ module aes_decipher_block(
 // EOF aes_decipher_block.v
 //======================================================================
 "
-/content/aes/src/rtl/aes_encipher_block.v,undefined-module,undeclared_use,True,nao reparado,False,False,False,,,,1,0,"//======================================================================
+/content/aes/src/rtl/aes_encipher_block.v,undefined-module,undeclared_use,True,not repaired,False,False,False,,,,1,0,"//======================================================================
 //
 // aes_encipher_block.v
 // --------------------
@@ -6439,7 +6439,7 @@ endmodule // aes_encipher_block
 // EOF aes_encipher_block.v
 //======================================================================
 "
-/content/aes/src/rtl/aes_inv_sbox.v,invalid-nesting,double_end,True,nao reparado,False,False,False,,,,1,0,"//======================================================================
+/content/aes/src/rtl/aes_inv_sbox.v,invalid-nesting,double_end,True,not repaired,False,False,False,,,,1,0,"//======================================================================
 //
 // aes_inv_sbox.v
 // --------------
@@ -7092,7 +7092,7 @@ endmodule // aes_inv_sbox
 // EOF aes_inv_sbox.v
 //======================================================================
 "
-/content/aes/src/rtl/aes_sbox.v,functional-equivalence,func_xor_payload,True,"compilou, mas nao-equivalente",False,True,False,169906.704,18483,79.2455,1,0,"//======================================================================
+/content/aes/src/rtl/aes_sbox.v,functional-equivalence,func_xor_payload,True,"compiles, but not equivalent",False,True,False,169906.704,18483,79.2455,1,0,"//======================================================================
 //
 // aes_sbox.v
 // ----------
@@ -7747,7 +7747,7 @@ endmodule // aes_sbox
 // EOF aes_sbox.v
 //======================================================================
 "
-/content/aes/src/rtl/aes_key_mem.v,non-synthesizable-construct,delay_nonsynth,False,needs-yosys (passou gates atuais),True,True,True,169677.7344,18484,79.233,1,0,"//======================================================================
+/content/aes/src/rtl/aes_key_mem.v,non-synthesizable-construct,delay_nonsynth,False,needs-yosys (passes compile + equivalence gates),True,True,True,169677.7344,18484,79.233,1,0,"//======================================================================
 //
 // aes_key_mem.v
 // -------------
@@ -8620,7 +8620,7 @@ endmodule // aes_key_mem
 // EOF aes_key_mem.v
 //======================================================================
 "
-/content/aes/src/rtl/aes_core.v,sim-only-system-task,display_simonly,False,needs-yosys (passou gates atuais),True,True,True,169207.2832,18612,78.6502,1,0,"//======================================================================
+/content/aes/src/rtl/aes_core.v,sim-only-system-task,display_simonly,False,needs-yosys (passes compile + equivalence gates),True,True,True,169207.2832,18612,78.6502,1,0,"//======================================================================
 //
 // aes_core.v
 // ----------

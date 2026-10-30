@@ -1,7 +1,7 @@
 """LLM client wrapper over the HuggingFace Inference Router.
 
-Reused almost verbatim from the AHA notebook's ``hf_chat`` (proven retry/backoff
-with transient-error detection and usage accounting), wrapped in a small class so
+Provides retry/backoff with transient-error detection and usage accounting,
+wrapped in a small class so
 the rest of the package does not touch huggingface_hub directly.
 """
 from __future__ import annotations

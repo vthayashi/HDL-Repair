@@ -1,6 +1,4 @@
 """RTL extraction and structural validation of LLM output.
-
-Reused from the AHA notebook (``extract_verilog_block`` / ``validate_rtl_candidate``).
 """
 from __future__ import annotations
 

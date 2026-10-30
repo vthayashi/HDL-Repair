@@ -1,48 +1,62 @@
-# Resultados — reparo de AES defeituoso (sem Yosys ainda)
+# Results — repairing defective AES
 
-Gerado por `tools/run_dataset.py` sobre `datasets/AES_defective_examples.csv`.
-Golden: `golden/aes` (secworks/aes). Gates ativos: compilacao (iverilog) + equivalencia (testbench do golden).
-Gate de sintese (Yosys/sky130) ainda nao instalado — ver `synthesis.py::run_synthesis_gate`.
+Produced by `tools/run_dataset.py` on `datasets/AES_defective_examples.csv`.
+Golden: `golden/aes` (secworks/aes). Active gates: compilation (iverilog) and
+equivalence (golden testbench). The synthesis gate (Yosys/sky130) was not enabled
+for this run; see [`docs/synthesis_gate.md`](../docs/synthesis_gate.md).
 
-| # | modulo | defeito injetado | detectavel sem Yosys | resultado | iter |
+| # | Module | Injected defect | Detectable without Yosys | Outcome | Iter. |
 |---|---|---|---|---|---|
-| 0 | aes_sbox.v | erro de sintaxe | sim | REPARADO (compila + equivalente) | 2 |
-| 1 | aes_inv_sbox.v | erro de sintaxe | sim | REPARADO (compila + equivalente) | 2 |
-| 2 | aes_key_mem.v | modulo/sinal indefinido | sim | REPARADO (compila + equivalente) | 2 |
-| 3 | aes_core.v | modulo/sinal indefinido | sim | REPARADO (compila + equivalente) | 2 |
-| 4 | aes.v | construto nao-sintetizavel | sim | REPARADO (compila + equivalente) | 2 |
-| 5 | aes_encipher_block.v | construto nao-sintetizavel | nao | passou gates atuais (so Yosys pega) | 1 |
-| 6 | aes_decipher_block.v | erro de sintaxe | sim | compilou, mas nao-equivalente | 3 |
-| 7 | aes_encipher_block.v | modulo/sinal indefinido | sim | REPARADO (compila + equivalente) | 3 |
-| 8 | aes_inv_sbox.v | aninhamento invalido | sim | REPARADO (compila + equivalente) | 2 |
-| 9 | aes_sbox.v | bug funcional | sim | REPARADO (compila + equivalente) | 2 |
-| 10 | aes_key_mem.v | construto nao-sintetizavel | nao | passou gates atuais (so Yosys pega) | 1 |
-| 11 | aes_core.v | task so-de-simulacao | nao | passou gates atuais (so Yosys pega) | 1 |
+| 0 | aes_sbox.v | syntax error | yes | REPAIRED (compiles + equivalent) | 2 |
+| 1 | aes_inv_sbox.v | syntax error | yes | REPAIRED (compiles + equivalent) | 2 |
+| 2 | aes_key_mem.v | undefined module/signal | yes | REPAIRED (compiles + equivalent) | 2 |
+| 3 | aes_core.v | undefined module/signal | yes | REPAIRED (compiles + equivalent) | 2 |
+| 4 | aes.v | non-synthesizable construct | yes | REPAIRED (compiles + equivalent) | 2 |
+| 5 | aes_encipher_block.v | non-synthesizable construct | no | passes current gates (synthesis-only) | 1 |
+| 6 | aes_decipher_block.v | syntax error | yes | compiles, but not equivalent | 3 |
+| 7 | aes_encipher_block.v | undefined module/signal | yes | REPAIRED (compiles + equivalent) | 3 |
+| 8 | aes_inv_sbox.v | invalid nesting | yes | REPAIRED (compiles + equivalent) | 2 |
+| 9 | aes_sbox.v | functional bug | yes | REPAIRED (compiles + equivalent) | 2 |
+| 10 | aes_key_mem.v | non-synthesizable construct | no | passes current gates (synthesis-only) | 1 |
+| 11 | aes_core.v | simulation-only task | no | passes current gates (synthesis-only) | 1 |
 
-**Resumo:** 12 exemplos de AES defeituoso. Dos 9 detectaveis sem Yosys, **8 foram reparados** (voltaram a compilar e a bater com o golden) e 1 compilou mas nao recuperou equivalencia. Os 3 restantes compilam/passam no testbench e **so o gate de sintese (Yosys) detecta** — proxima etapa (Gabriel). Tokens LLM totais: ~89k (DeepSeek-V3).
+**Summary.** 12 defective AES examples. Of the 9 detectable without Yosys,
+**8 were repaired** (compile again and match the golden testbench) and 1 compiled
+but did not recover equivalence. The other 3 compile and pass the testbench; only
+a synthesis-level check can flag them. Total LLM tokens: ~89k (DeepSeek-V3).
 
-## Codigos corrigidos (`AES_repaired_examples.csv`)
+## Repaired code (`AES_repaired_examples.csv`)
 
-Gerado pelo mesmo script com `--codes-out` (replicavel). Contem, por exemplo, o
-codigo defeituoso de entrada (`Defective_Code`) e o codigo reparado produzido
-pela ferramenta (`Repaired_Code`), alem de status/iteracoes/tokens.
+Produced by the same script with `--codes-out`. For each example it contains the
+defective input (`Defective_Code`), the repaired output (`Repaired_Code`), and
+status, iteration and token counts.
 
-Esta versao cobre os **8 modulos menores** (`aes`, `aes_core`, `aes_key_mem`,
-`aes_encipher_block`, `aes_decipher_block`). Os dois ROMs de S-box
-(`aes_sbox.v` / `aes_inv_sbox.v`, tabelas de 256 entradas) ficaram de fora deste
-CSV porque a LLM precisa regenerar a tabela inteira a cada iteracao, o que torna
-a execucao muito lenta nesta sessao — eles estao documentados na tabela de 12
-acima e entram no CSV completo quando a API estiver mais rapida.
+This CSV covers the **8 smaller-module examples** (`aes`, `aes_core`,
+`aes_key_mem`, `aes_encipher_block`, `aes_decipher_block`). The two S-box ROMs
+(`aes_sbox.v` / `aes_inv_sbox.v`, 256-entry tables) are excluded because the LLM
+must regenerate the whole table on every iteration, which makes runs slow; they
+are covered in the 12-row table above.
 
-Reproduzir:
+Reproduce:
 
-```
+```bash
 PYTHONPATH=src python tools/run_dataset.py --csv datasets/_fast_subset.csv \
     --max-iter 3 --out datasets/results_fast.csv \
     --codes-out datasets/AES_repaired_examples.csv
 ```
 
-Resultado deste subconjunto (8): **7 aceitos** (4 reparos reais de codigo + 3 casos
-`needs-yosys` que passam nos gates atuais) e **1 nao-equivalente** (`aes_decipher_block.v`,
-`missing_endmodule`: a LLM recolocou o `endmodule` e o codigo compilou, mas alterou
-logica ao regenerar o bloco e perdeu a equivalencia).
+Outcome on this subset (8): **7 accepted** (4 genuine code repairs plus 3
+`needs-yosys` cases that pass the current gates) and **1 not equivalent**
+(`aes_decipher_block.v`, `missing_endmodule`: the LLM restored `endmodule` and
+the code compiled, but regenerating the block changed its logic and broke
+equivalence).
+
+## Other result files
+
+| File | Contents |
+|---|---|
+| `results.csv` | full 12-row run behind the table above |
+| `results_fast.csv` / `_fast_subset.csv` | 8-row subset run (input + results) |
+| `results_retry.csv` / `_retry_subset.csv` | re-run of failed rows |
+| `results_llm.csv`, `results_all_examples.csv` | additional LLM runs |
+| `results_yosys_ingest.csv` | ingest-only run (`--no-llm --max-iter 1`) with the Yosys gate enabled |

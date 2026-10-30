@@ -4,8 +4,8 @@ A PAIR-style iterative loop (ingest -> gate -> analyze -> repair) that takes an
 LLM-generated RTL file, and repairs it until it is synthesizable AND functionally
 equivalent to a golden/base reference design, collecting synthesis (PPA) metrics.
 
-The engine is re-framed from the AHA Challenge 2026 trojan-generation notebook:
-the roles are Ingestor / Repairer / Synthesizability-analyst (no CVSS/exploit).
+Roles: Ingestor (evaluate the input as-is), Synthesizability analyst (diagnose
+failures into repair actions) and Repairer (rewrite the module).
 """
 
 from .config import DesignSpec, RepairConfig, load_config, aes_design

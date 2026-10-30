@@ -1,4 +1,4 @@
-"""Repairer — re-framed from the AHA refiner.
+"""Repairer: LLM-driven module rewrite.
 
 Builds the repair prompt from the current candidate, the analyst's actions, and
 the tool log tail, then asks the LLM for a complete, corrected module. The

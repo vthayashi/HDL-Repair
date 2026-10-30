@@ -45,7 +45,7 @@ def main() -> int:
     ap.add_argument("--out", type=Path, default=ROOT / "datasets" / "results.csv")
     ap.add_argument("--codes-out", type=Path,
                     default=ROOT / "datasets" / "AES_repaired_examples.csv",
-                    help="CSV with the repaired RTL of each example (for replication/handoff)")
+                    help="CSV with the repaired RTL of each example (for replication)")
     args = ap.parse_args()
 
     rows = load_rows(args.csv)
@@ -56,7 +56,7 @@ def main() -> int:
     gen_dir.mkdir(parents=True, exist_ok=True)
 
     results = []
-    codes = []  # repaired RTL per example, for the handoff/replication CSV
+    codes = []  # repaired RTL per example, for the replication CSV
     for i, row in enumerate(rows):
         design = (row.get("Design") or "").split("/")[-1].strip()
         if design not in AES_FILES:
@@ -113,13 +113,13 @@ def main() -> int:
 
             # derive a human-readable status and collect the repaired RTL
             if str(res["detectable_now"]) == "False":
-                status = "needs-yosys (passou gates atuais)"
+                status = "needs-yosys (passes compile + equivalence gates)"
             elif res["accepted"]:
-                status = "repaired (compila + equivalente)"
+                status = "repaired (compiles + equivalent)"
             elif res["final_compile_ok"]:
-                status = "compilou, mas nao-equivalente"
+                status = "compiles, but not equivalent"
             else:
-                status = "nao reparado"
+                status = "not repaired"
             repaired_code = code  # fall back to the input if nothing better materialized
             rp = summary.get("repaired_rtl")
             if rp and Path(rp).exists():
@@ -160,7 +160,7 @@ def main() -> int:
             w.writerows(results)
         print(f"\nwrote results -> {args.out}")
 
-    # save the repaired-code CSV (handoff + replication)
+    # save the repaired-code CSV (replication)
     if codes:
         fields = ["Design", "Defect_Category", "Defect_Id", "Detectable_Without_Yosys",
                   "Status", "Accepted", "Final_Compile_OK", "Final_Equiv_Pass",
