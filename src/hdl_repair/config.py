@@ -161,7 +161,8 @@ def aes_design(target_rtl: str = "aes_key_mem.v") -> DesignSpec:
 
     def opt_path(key: str) -> Optional[Path]:
         val = env.get(key) or os.environ.get(key)
-        return Path(val) if val else None
+        # relative paths in .env are relative to the project root, not the cwd
+        return (PROJECT_ROOT / val).resolve() if val else None
 
     liberty = opt_path("SKY130_LIB") or DEFAULT_SKY130_LIB
     return DesignSpec(
