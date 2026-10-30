@@ -59,12 +59,13 @@ def main() -> int:
     print("-----------------------------------------------")
 
     if res.synthesizable and res.area is not None:
-        print("\n✅ SANITY CHECK PASSED! Yosys and OpenSTA flow are working as expected.")
+        sta = "and OpenSTA flow are working" if res.sta_available else "flow is working (OpenSTA not found)"
+        print(f"\n[PASS] SANITY CHECK PASSED! Yosys {sta}.")
         print(f"Area Report written to: {work_dir / 'area_report.txt'}")
         print(f"STA Report written to : {work_dir / 'sta_report.txt'}")
         return 0
     else:
-        print("\n❌ SANITY CHECK FAILED! Inspect Yosys log below:")
+        print("\n[FAIL] SANITY CHECK FAILED! Inspect Yosys log below:")
         print(res.log[-2000:])
         return 1
 

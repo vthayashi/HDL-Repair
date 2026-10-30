@@ -26,7 +26,9 @@ def parse_area_report(area_text: str) -> dict[str, Any]:
     ma = re.search(r"Chip area for .*?:\s*([0-9.]+)", area_text)
     if ma:
         out["chip_area"] = float(ma.group(1))
-    mc = re.search(r"Number of cells:\s*([0-9]+)", area_text)
+    # older Yosys: "Number of cells: N"; newer: "    N <area> cells" (first = top module)
+    mc = (re.search(r"Number of cells:\s*([0-9]+)", area_text)
+          or re.search(r"^\s*([0-9]+)\s+\S+\s+cells\s*$", area_text, re.MULTILINE))
     if mc:
         out["cell_count"] = int(mc.group(1))
     return out

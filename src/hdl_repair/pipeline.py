@@ -108,9 +108,9 @@ class RepairPipeline:
         (sim_dir / "sim.log").write_text(sim_log, encoding="utf-8")
 
         if not gate.compile_ok:
-            print(f"\n[EVAL ERROR] ❌ Compilation Failed for {candidate_path.name}! Check: {sim_dir / 'compile.log'}")
+            print(f"\n[EVAL ERROR] Compilation Failed for {candidate_path.name}! Check: {sim_dir / 'compile.log'}")
         elif not gate.equiv_pass:
-            print(f"\n[EVAL ERROR] ❌ Equivalence / Testbench Failed for {candidate_path.name}! Check: {sim_dir / 'sim.log'}")
+            print(f"\n[EVAL ERROR] Equivalence / Testbench Failed for {candidate_path.name}! Check: {sim_dir / 'sim.log'}")
 
         # 2. SYNTHESIS EVALUATION
         synth = None
@@ -119,7 +119,7 @@ class RepairPipeline:
 
         if not self.cfg.run_synthesis:
             msg = "run_synthesis is set to FALSE in RepairConfig!"
-            print(f"\n[EVAL WARNING] ⚠️ SYNTHESIS SKIPPED: {msg}")
+            print(f"\n[EVAL WARNING] SYNTHESIS SKIPPED: {msg}")
             (synth_dir / "SYNTH_SKIPPED.txt").write_text(msg, encoding="utf-8")
         else:
             synth = run_synthesis_gate(
@@ -134,12 +134,12 @@ class RepairPipeline:
             (synth_dir / "opensta.log").write_text(sta_log, encoding="utf-8")
 
             if not synth.available:
-                print(f"\n[EVAL ERROR] ❌ Yosys/Liberty Unavailable: {synth.skipped_reason}")
+                print(f"\n[EVAL ERROR] Yosys/Liberty Unavailable: {synth.skipped_reason}")
                 (synth_dir / "ERROR_UNAVAILABLE.txt").write_text(synth.skipped_reason, encoding="utf-8")
             elif not synth.synthesizable:
-                print(f"\n[EVAL ERROR] ❌ Yosys Mapping Failed! Check: {synth_dir / 'yosys.log'}")
+                print(f"\n[EVAL ERROR] Yosys Mapping Failed! Check: {synth_dir / 'yosys.log'}")
             elif not synth.sta_available:
-                print(f"\n[EVAL WARNING] ⚠️ OpenSTA binary not found! Timing slack skipped.")
+                print(f"\n[EVAL WARNING] OpenSTA binary not found! Timing slack skipped.")
 
         return {"gate": gate, "synth": synth}
 
