@@ -25,8 +25,9 @@ For each run, given an input RTL file and a golden design:
    - *Compilation* — `iverilog` compiles the design with the candidate replacing
      the target file. The golden tree is never modified.
    - *Synthesizability* — `yosys` elaborates the design and maps it to the
-     sky130 standard-cell library. Optional: if Yosys is not installed, the gate
-     is reported as *unverified* and does not block the loop.
+     sky130 standard-cell library; internal cells left unmapped (e.g. `$print`
+     from a `$display`) also fail the gate. Optional: if Yosys is not installed,
+     the gate is reported as *unverified* and does not block the loop.
    - *Equivalence* — the golden testbench (`tb_aes`) must pass.
 3. **Analyst** (when a gate fails): classifies the failure using the taxonomy from
    the reference paper (late syntax error, undefined module, non-synthesizable
@@ -73,7 +74,10 @@ External tools expected on `PATH`:
 | `yosys` | synthesizability gate, area and cell count | optional |
 | `sta` (OpenSTA) | timing / slack | optional |
 
-All three are available in the [OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build).
+`iverilog` and `yosys` ship with the [OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build)
+(Linux, macOS and Windows builds). [OpenSTA](https://github.com/parallaxsw/OpenSTA)
+is built from source on Linux; on Windows it can be built in WSL and exposed as
+`sta` through a small wrapper that translates Windows paths.
 
 The golden model ([secworks/aes](https://github.com/secworks/aes)) is vendored in
 `golden/aes/`, and the sky130 Liberty file
@@ -156,11 +160,20 @@ runs/            # per-run artifacts (git-ignored)
 
 ## Results
 
-On 12 defective AES variants covering the five defect categories, the loop
-repaired 8 of the 9 defects detectable by compilation/simulation alone. The
-remaining 3 compile and pass the testbench but contain non-synthesizable or
-simulation-only constructs; they are the target of the synthesis gate. See
-[`datasets/RESULTS.md`](datasets/RESULTS.md) for details and reproduction steps.
+On 12 defective AES variants covering the five defect categories, with all three
+gates active (iverilog, Yosys/sky130, golden testbench) and OpenSTA timing:
+
+| Outcome | Examples |
+|---|---|
+| Repaired (compiles + synthesizes + equivalent) | **10 / 12**, each in one repair iteration |
+| Compiles and synthesizes, not equivalent | 1 (missing `endmodule` in the decipher block) |
+| Undetected (`#` delay, dropped silently by Yosys) | 1 |
+
+Repaired designs match the golden's area (167,613 µm², 0.000 % overhead in 9 of
+10) and worst slack (74.08 ns at 100 ns), at 12.9k tokens per repair on average.
+Of the 3 defects invisible to simulation, the synthesis gate catches 2. See
+[`datasets/RESULTS.md`](datasets/RESULTS.md) for the per-example table and
+reproduction steps.
 
 ## Scope and next steps
 

@@ -20,7 +20,9 @@ def extract_verilog_block(text: str) -> str:
 
 def module_name_of(rtl_text: str) -> str | None:
     """Return the first module name declared in the RTL, if any."""
-    m = re.search(r"\bmodule\s+([A-Za-z_]\w*)", rtl_text or "")
+    # strip comments first: headers often say things like "module that ..."
+    code = re.sub(r"//[^\n]*|/\*.*?\*/", "", rtl_text or "", flags=re.DOTALL)
+    m = re.search(r"\bmodule\s+([A-Za-z_]\w*)", code)
     return m.group(1) if m else None
 
 

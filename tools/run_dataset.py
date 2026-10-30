@@ -106,16 +106,18 @@ def main() -> int:
                 first = json.loads(jl.read_text(encoding="utf-8").splitlines()[0])
                 res["ingest_compile_ok"] = first.get("compile_ok")
                 res["ingest_equiv_pass"] = first.get("equiv_pass")
+                res["ingest_synthesizable"] = first.get("synthesizable")
                 res["ingest_categories"] = ",".join(first.get("issue_categories", []) or [])
             except Exception:
                 pass
             results.append(res)
 
-            # derive a human-readable status and collect the repaired RTL
-            if str(res["detectable_now"]) == "False":
-                status = "needs-yosys (passes compile + equivalence gates)"
+            # derive a human-readable status from what the gates observed
+            gates = "compiles + synthesizable + equivalent" if res["synth_verified"] else "compiles + equivalent"
+            if res["accepted"] and res["best_iter"] == 1:
+                status = f"undetected (input passes all gates: {gates})"
             elif res["accepted"]:
-                status = "repaired (compiles + equivalent)"
+                status = f"repaired ({gates})"
             elif res["final_compile_ok"]:
                 status = "compiles, but not equivalent"
             else:

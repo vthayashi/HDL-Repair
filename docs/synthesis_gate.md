@@ -57,9 +57,13 @@ does not require one (see below).
    (with the target module replaced by the candidate), then runs
    `hierarchy -check -top aes`, `proc/opt/flatten/memory/techmap`, `dfflibmap`,
    `abc -liberty ...` and `stat`, yielding area and cell count.
-3. Sets `synthesizable = True` if elaboration and mapping succeed and a netlist
-   is produced.
+3. Sets `synthesizable = True` if elaboration and mapping succeed, a netlist is
+   produced, and no Yosys internal cell other than `$scopeinfo` is left after
+   mapping (`unmapped_cells`). Yosys keeps `$display`/`$write` as a `$print`
+   cell and still writes a netlist, so this check is what rejects them.
 4. On failure, classifies the log (`classify_errors`) to guide the repair.
+5. If OpenSTA (`sta`) is on `PATH`, runs it on the netlist and records the worst
+   slack across path groups.
 
 When Yosys is available, the ACCEPT criterion requires
 **compiles + equivalent + synthesizable**. Cases that would otherwise pass for
@@ -80,14 +84,18 @@ PYTHONPATH=src python tools/run_dataset.py \
     --no-llm --max-iter 1 --out datasets/results_yosys_check.csv
 ```
 
-Expected: `synth_verified` is `True` for every row (the gate ran). Compare with
-`datasets/results.csv` (no Yosys) and `datasets/results_yosys_ingest.csv` (a
-previous ingest-only run with Yosys enabled).
+Expected: `synth_verified` is `True` for every row (the gate ran), and the
+synthesis gate rejects two of the three `synthesis_only_defects/` cases:
 
-> **Note.** Yosys accepts some simulation-only constructs (it ignores `#` delays
-> and `$display`), so not every case in `synthesis_only_defects/` is rejected by
-> the stock flow. Catching them reliably needs extra checks, for example a lint
-> pass (`verilator --lint-only`) or Yosys `read_verilog -sv` with stricter options.
+| File | Caught by |
+|---|---|
+| `aes_encipher_block__initial_block_nonsynth.v` | Yosys elaboration |
+| `aes_core__display_simonly.v` | unmapped `$print` cell |
+| `aes_key_mem__delay_nonsynth.v` | not caught |
+
+> **Note.** Yosys silently drops `#` delays, so a delay-only defect leaves no trace
+> in the netlist. Catching it needs an extra check, for example a lint pass
+> (`verilator --lint-only`, included in the OSS CAD Suite).
 
 Standalone sanity check (synthesize the untouched golden design):
 

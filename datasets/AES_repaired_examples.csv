@@ -1,5 +1,5 @@
 Design,Defect_Category,Defect_Id,Detectable_Without_Yosys,Status,Accepted,Final_Compile_OK,Final_Equiv_Pass,Area,Cells,Slack,Iterations,Tokens,Defective_Code,Repaired_Code
-/content/aes/src/rtl/aes_sbox.v,late-syntax-error,syntax_bad_lvalue,True,not repaired,False,False,False,,,,1,0,"//======================================================================
+/content/aes/src/rtl/aes_sbox.v,late-syntax-error,syntax_bad_lvalue,True,repaired (compiles + synthesizable + equivalent),True,True,True,167613.2544,18707,74.0827,2,17170,"//======================================================================
 //
 // aes_sbox.v
 // ----------
@@ -327,58 +327,17 @@ endmodule // aes_sbox
 //======================================================================
 // EOF aes_sbox.v
 //======================================================================
-","//======================================================================
-//
-// aes_sbox.v
-// ----------
-// The AES S-box. Basically a 256 Byte ROM. This implementation
-// contains four parallel S-boxes to handle a 32 bit word.
-//
-//
-// Author: Joachim Strombergson
-// Copyright (c) 2014, Secworks Sweden AB
-// All rights reserved.
-//
-// Redistribution and use in source and binary forms, with or
-// without modification, are permitted provided that the following
-// conditions are met:
-//
-// 1. Redistributions of source code must retain the above copyright
-//    notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-//    notice, this list of conditions and the following disclaimer in
-//    the documentation and/or other materials provided with the
-//    distribution.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// ""AS IS"" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
-// FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
-// COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
-// INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
-// BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
-// ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-//======================================================================
-
-`default_nettype none
+","`default_nettype none
 
 module aes_sbox(
                 input wire [31 : 0]  sboxw,
                 output wire [31 : 0] new_sboxw
                );
 
-
   //----------------------------------------------------------------
   // The sbox array.
   //----------------------------------------------------------------
   wire [7 : 0] sbox [0 : 255];
-
 
   //----------------------------------------------------------------
   // Four parallel muxes.
@@ -387,7 +346,6 @@ module aes_sbox(
   assign new_sboxw[23 : 16] = sbox[sboxw[23 : 16]];
   assign new_sboxw[15 : 08] = sbox[sboxw[15 : 08]];
   assign new_sboxw[07 : 00] = sbox[sboxw[07 : 00]];
-
 
   //----------------------------------------------------------------
   // Creating the sbox array contents.
@@ -649,14 +607,9 @@ module aes_sbox(
   assign sbox[8'hfe] = 8'hbb;
   assign sbox[8'hff] = 8'h16;
 
-  wire [7:0] tap_status = ;  // injected: malformed l-value
 endmodule // aes_sbox
-
-//======================================================================
-// EOF aes_sbox.v
-//======================================================================
 "
-/content/aes/src/rtl/aes_inv_sbox.v,late-syntax-error,syntax_stray_token,True,not repaired,False,False,False,,,,1,0,"//======================================================================
+/content/aes/src/rtl/aes_inv_sbox.v,late-syntax-error,syntax_stray_token,True,repaired (compiles + synthesizable + equivalent),True,True,True,167613.2544,18707,74.0827,2,17294,"//======================================================================
 //
 // aes_inv_sbox.v
 // --------------
@@ -1013,7 +966,7 @@ endmodule // aes_inv_sbox
 // BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
 // LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+// STRICT LIABILITY, OR TOT (INCLUDING NEGLIGENCE OR OTHERWISE)
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
@@ -1302,14 +1255,13 @@ module aes_inv_sbox(
   assign inv_sbox[8'hfe] = 8'h0c;
   assign inv_sbox[8'hff] = 8'h7d;
 
-  @@DEBUG_HOOK@@  // injected: stray token
 endmodule // aes_inv_sbox
 
 //======================================================================
 // EOF aes_inv_sbox.v
 //======================================================================
 "
-/content/aes/src/rtl/aes_key_mem.v,undefined-module,undefined_module,True,not repaired,False,False,False,,,,1,0,"//======================================================================
+/content/aes/src/rtl/aes_key_mem.v,undefined-module,undefined_module,True,repaired (compiles + synthesizable + equivalent),True,True,True,167613.2544,18707,74.0827,2,7987,"//======================================================================
 //
 // aes_key_mem.v
 // -------------
@@ -2173,14 +2125,14 @@ module aes_key_mem(
       endcase // case (key_mem_ctrl_reg)
 
     end // key_mem_ctrl
-  shadow_keylog u_shadow (.clk(clk), .rst_n(reset_n));  // injected: undefined module
+
 endmodule // aes_key_mem
 
 //======================================================================
 // EOF aes_key_mem.v
 //======================================================================
 "
-/content/aes/src/rtl/aes_core.v,undefined-module,undefined_signal,True,not repaired,False,False,False,,,,1,0,"//======================================================================
+/content/aes/src/rtl/aes_core.v,undefined-module,undefined_signal,True,repaired (compiles + synthesizable + equivalent),True,True,True,167613.2544,18707,74.0827,2,5691,"//======================================================================
 //
 // aes_core.v
 // ----------
@@ -2861,15 +2813,14 @@ module aes_core(
       endcase // case (aes_core_ctrl_reg)
 
     end // aes_core_ctrl
-  wire [127:0] leak_bus;
-  assign leak_bus = secret_tap;  // injected: secret_tap is undeclared
+
 endmodule // aes_core
 
 //======================================================================
 // EOF aes_core.v
 //======================================================================
 "
-/content/aes/src/rtl/aes.v,non-synthesizable-construct,finish_in_dut,True,"compiles, but not equivalent",False,True,False,,,,1,0,"//======================================================================
+/content/aes/src/rtl/aes.v,non-synthesizable-construct,finish_in_dut,True,repaired (compiles + synthesizable + equivalent),True,True,True,167613.2544,18707,74.0827,2,5295,"//======================================================================
 //
 // aes.v
 // --------
@@ -3414,17 +3365,14 @@ module aes(
             end
         end
     end // addr_decoder
-  initial begin
-    #20;
-    $finish;  // injected: sim-only + non-synth kill switch inside DUT
-  end
+
 endmodule // aes
 
 //======================================================================
 // EOF aes.v
 //======================================================================
 "
-/content/aes/src/rtl/aes_encipher_block.v,non-synthesizable-construct,initial_block_nonsynth,False,needs-yosys (passes compile + equivalence gates),False,True,True,,,,1,0,"//======================================================================
+/content/aes/src/rtl/aes_encipher_block.v,non-synthesizable-construct,initial_block_nonsynth,False,repaired (compiles + synthesizable + equivalent),True,True,True,167599.4912,18726,73.9108,2,14468,"//======================================================================
 //
 // aes_encipher_block.v
 // --------------------
@@ -4106,6 +4054,8 @@ module aes_encipher_block(
   reg [1 : 0]   enc_ctrl_new;
   reg           enc_ctrl_we;
 
+  reg [3 : 0]   boot_ctr;
+
 
   //----------------------------------------------------------------
   // Wires.
@@ -4389,25 +4339,12 @@ module aes_encipher_block(
                 enc_ctrl_we  = 1'b1;
               end
           end
-
-        default:
-          begin
-            // Empty. Just here to make the synthesis tool happy.
-          end
-      endcase // case (enc_ctrl_reg)
+      endcase
     end // encipher_ctrl
 
-  initial begin
-    reg [7:0] boot_ctr;  // injected: initial block w/ local decl (compiles; non-synth, needs Yosys)
-    boot_ctr = 8'h00;
-  end
 endmodule // aes_encipher_block
-
-//======================================================================
-// EOF aes_encipher_block.v
-//======================================================================
 "
-/content/aes/src/rtl/aes_decipher_block.v,late-syntax-error,missing_endmodule,True,not repaired,False,False,False,,,,1,0,"//======================================================================
+/content/aes/src/rtl/aes_decipher_block.v,late-syntax-error,missing_endmodule,True,"compiles, but not equivalent",False,True,False,166239.4368,18272,79.3945,2,18789,"//======================================================================
 //
 // aes_decipher_block.v
 // --------------------
@@ -5401,8 +5338,6 @@ module aes_decipher_block(
             if (next)
               begin
                 round_ctr_set = 1'b1;
-                ready_new     = 1'b0;
-                ready_we      = 1'b1;
                 dec_ctrl_new  = CTRL_INIT;
                 dec_ctrl_we   = 1'b1;
               end
@@ -5410,7 +5345,6 @@ module aes_decipher_block(
 
         CTRL_INIT:
           begin
-            sword_ctr_rst = 1'b1;
             update_type   = INIT_UPDATE;
             dec_ctrl_new  = CTRL_SBOX;
             dec_ctrl_we   = 1'b1;
@@ -5418,11 +5352,11 @@ module aes_decipher_block(
 
         CTRL_SBOX:
           begin
-            sword_ctr_inc = 1'b1;
             update_type   = SBOX_UPDATE;
+            sword_ctr_inc = 1'b1;
+
             if (sword_ctr_reg == 2'h3)
               begin
-                round_ctr_dec = 1'b1;
                 dec_ctrl_new  = CTRL_MAIN;
                 dec_ctrl_we   = 1'b1;
               end
@@ -5430,37 +5364,34 @@ module aes_decipher_block(
 
         CTRL_MAIN:
           begin
-            sword_ctr_rst = 1'b1;
-            if (round_ctr_reg > 0)
+            update_type   = MAIN_UPDATE;
+            round_ctr_dec = 1'b1;
+
+            if (round_ctr_reg == 4'h1)
               begin
-                update_type   = MAIN_UPDATE;
-                dec_ctrl_new  = CTRL_SBOX;
+                dec_ctrl_new  = CTRL_IDLE;
                 dec_ctrl_we   = 1'b1;
+                ready_new     = 1'b1;
+                ready_we      = 1'b1;
               end
             else
               begin
-                update_type  = FINAL_UPDATE;
-                ready_new    = 1'b1;
-                ready_we     = 1'b1;
-                dec_ctrl_new = CTRL_IDLE;
-                dec_ctrl_we  = 1'b1;
+                dec_ctrl_new  = CTRL_SBOX;
+                dec_ctrl_we   = 1'b1;
               end
           end
 
         default:
           begin
-            // Empty. Just here to make the synthesis tool happy.
+            dec_ctrl_new  = CTRL_IDLE;
+            dec_ctrl_we   = 1'b1;
           end
       endcase // case (dec_ctrl_reg)
     end // decipher_ctrl
 
- // aes_decipher_block
-
-//======================================================================
-// EOF aes_decipher_block.v
-//======================================================================
+endmodule // aes_decipher_block
 "
-/content/aes/src/rtl/aes_encipher_block.v,undefined-module,undeclared_use,True,not repaired,False,False,False,,,,1,0,"//======================================================================
+/content/aes/src/rtl/aes_encipher_block.v,undefined-module,undeclared_use,True,repaired (compiles + synthesizable + equivalent),True,True,True,167613.2544,18707,74.0827,2,15328,"//======================================================================
 //
 // aes_encipher_block.v
 // --------------------
@@ -6423,23 +6354,12 @@ module aes_encipher_block(
                 enc_ctrl_we  = 1'b1;
               end
           end
-
-        default:
-          begin
-            // Empty. Just here to make the synthesis tool happy.
-          end
       endcase // case (enc_ctrl_reg)
     end // encipher_ctrl
 
-  wire rogue_w;
-  assign rogue_w = ghost_sig;  // injected: ghost_sig undeclared
 endmodule // aes_encipher_block
-
-//======================================================================
-// EOF aes_encipher_block.v
-//======================================================================
 "
-/content/aes/src/rtl/aes_inv_sbox.v,invalid-nesting,double_end,True,not repaired,False,False,False,,,,1,0,"//======================================================================
+/content/aes/src/rtl/aes_inv_sbox.v,invalid-nesting,double_end,True,repaired (compiles + synthesizable + equivalent),True,True,True,167613.2544,18707,74.0827,2,18453,"//======================================================================
 //
 // aes_inv_sbox.v
 // --------------
@@ -7085,14 +7005,9 @@ module aes_inv_sbox(
   assign inv_sbox[8'hfe] = 8'h0c;
   assign inv_sbox[8'hff] = 8'h7d;
 
-  end  // injected: stray end / mismatched block
-endmodule // aes_inv_sbox
-
-//======================================================================
-// EOF aes_inv_sbox.v
-//======================================================================
+endmodule
 "
-/content/aes/src/rtl/aes_sbox.v,functional-equivalence,func_xor_payload,True,"compiles, but not equivalent",False,True,False,169906.704,18483,79.2455,1,0,"//======================================================================
+/content/aes/src/rtl/aes_sbox.v,functional-equivalence,func_xor_payload,True,repaired (compiles + synthesizable + equivalent),True,True,True,167613.2544,18707,74.0827,2,16029,"//======================================================================
 //
 // aes_sbox.v
 // ----------
@@ -7419,58 +7334,17 @@ endmodule // aes_sbox
 //======================================================================
 // EOF aes_sbox.v
 //======================================================================
-","//======================================================================
-//
-// aes_sbox.v
-// ----------
-// The AES S-box. Basically a 256 Byte ROM. This implementation
-// contains four parallel S-boxes to handle a 32 bit word.
-//
-//
-// Author: Joachim Strombergson
-// Copyright (c) 2014, Secworks Sweden AB
-// All rights reserved.
-//
-// Redistribution and use in source and binary forms, with or
-// without modification, are permitted provided that the following
-// conditions are met:
-//
-// 1. Redistributions of source code must retain the above copyright
-//    notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-//    notice, this list of conditions and the following disclaimer in
-//    the documentation and/or other materials provided with the
-//    distribution.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// ""AS IS"" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
-// FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
-// COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
-// INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
-// BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
-// ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-//======================================================================
-
-`default_nettype none
+","`default_nettype none
 
 module aes_sbox(
                 input wire [31 : 0]  sboxw,
                 output wire [31 : 0] new_sboxw
                );
 
-
   //----------------------------------------------------------------
   // The sbox array.
   //----------------------------------------------------------------
   wire [7 : 0] sbox [0 : 255];
-
 
   //----------------------------------------------------------------
   // Four parallel muxes.
@@ -7478,8 +7352,7 @@ module aes_sbox(
   assign new_sboxw[31 : 24] = sbox[sboxw[31 : 24]];
   assign new_sboxw[23 : 16] = sbox[sboxw[23 : 16]];
   assign new_sboxw[15 : 08] = sbox[sboxw[15 : 08]];
-  assign new_sboxw[07 : 00] = sbox[sboxw[07 : 00]] ^ 8'h01;  // injected: functional payload
-
+  assign new_sboxw[07 : 00] = sbox[sboxw[07 : 00]];
 
   //----------------------------------------------------------------
   // Creating the sbox array contents.
@@ -7742,12 +7615,8 @@ module aes_sbox(
   assign sbox[8'hff] = 8'h16;
 
 endmodule // aes_sbox
-
-//======================================================================
-// EOF aes_sbox.v
-//======================================================================
 "
-/content/aes/src/rtl/aes_key_mem.v,non-synthesizable-construct,delay_nonsynth,False,needs-yosys (passes compile + equivalence gates),True,True,True,169677.7344,18484,79.233,1,0,"//======================================================================
+/content/aes/src/rtl/aes_key_mem.v,non-synthesizable-construct,delay_nonsynth,False,undetected (input passes all gates: compiles + synthesizable + equivalent),True,True,True,167613.2544,18707,74.0827,1,0,"//======================================================================
 //
 // aes_key_mem.v
 // -------------
@@ -8620,7 +8489,7 @@ endmodule // aes_key_mem
 // EOF aes_key_mem.v
 //======================================================================
 "
-/content/aes/src/rtl/aes_core.v,sim-only-system-task,display_simonly,False,needs-yosys (passes compile + equivalence gates),True,True,True,169207.2832,18612,78.6502,1,0,"//======================================================================
+/content/aes/src/rtl/aes_core.v,sim-only-system-task,display_simonly,False,repaired (compiles + synthesizable + equivalent),True,True,True,167613.2544,18707,74.0827,2,10885,"//======================================================================
 //
 // aes_core.v
 // ----------
@@ -9300,7 +9169,7 @@ module aes_core(
       endcase // case (aes_core_ctrl_reg)
 
     end // aes_core_ctrl
-  always @(posedge clk) $display(""[tap] round active"");  // injected: sim-only task in DUT (needs Yosys to flag)
+
 endmodule // aes_core
 
 //======================================================================

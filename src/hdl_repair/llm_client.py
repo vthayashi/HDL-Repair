@@ -43,10 +43,13 @@ class LLMClient:
             try:
                 from huggingface_hub import InferenceClient
 
+                # with streaming, the timeout bounds the wait between chunks, not the
+                # whole generation (full-module repairs take minutes)
                 self._client = InferenceClient(
                     base_url=cfg.hf_base_url,
                     provider=cfg.hf_provider,
                     api_key=cfg.hf_token,
+                    timeout=cfg.hf_http_timeout_sec,
                 )
             except Exception as e:  # pragma: no cover - init failure path
                 self._init_error = str(e)
@@ -72,30 +75,32 @@ class LLMClient:
         retries = max(1, int(cfg.hf_http_retries))
         base_sec = float(cfg.hf_http_backoff_base_sec)
         cap_sec = float(cfg.hf_http_backoff_cap_sec)
-        req_timeout = int(cfg.hf_http_timeout_sec)
-
         start = time.time()
         last_error = ""
         for net_try in range(1, retries + 1):
             try:
-                kwargs: dict[str, Any] = {
-                    "model": model,
-                    "messages": [
+                # Stream so the router's gateway (~240 s) never times out a long
+                # generation; usage arrives in the final chunk.
+                stream = self._client.chat.completions.create(
+                    model=model,
+                    messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt},
                     ],
-                    "temperature": temperature,
-                    "max_tokens": max_tokens,
-                    "timeout": req_timeout,
-                }
-                try:
-                    completion = self._client.chat.completions.create(**kwargs)
-                except TypeError:
-                    kwargs.pop("timeout", None)
-                    completion = self._client.chat.completions.create(**kwargs)
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    stream=True,
+                    stream_options={"include_usage": True},
+                )
+                parts: list[str] = []
+                usage_obj = None
+                for chunk in stream:
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        parts.append(chunk.choices[0].delta.content)
+                    if getattr(chunk, "usage", None):
+                        usage_obj = chunk.usage
 
-                text = completion.choices[0].message.content or ""
-                usage_obj = getattr(completion, "usage", None)
+                text = "".join(parts)
                 usage = {}
                 if usage_obj is not None:
                     usage = {
@@ -149,12 +154,16 @@ class LLMClient:
     ) -> dict[str, Any]:
         """Try each model in the chain; switch on transient errors."""
         last = {"ok": False, "error": "no model in chain", "text": "", "transient": False}
+        errors: list[str] = []
         for i, model in enumerate(chain, start=1):
             res = self.chat(model, system_prompt, user_prompt, temperature, max_tokens)
             last = res
             if res.get("ok"):
                 return res
+            errors.append(f"{model}: {res.get('error', '')}")
             if not res.get("transient", False):
-                return res
+                break
             # transient: fall through to next model
+        # report every model's failure, not just the last fallback's
+        last["error"] = " | ".join(errors)
         return last

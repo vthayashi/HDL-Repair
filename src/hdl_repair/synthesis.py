@@ -34,16 +34,29 @@ def parse_area_report(area_text: str) -> dict[str, Any]:
     return out
 
 
+# Yosys internal cells that legitimately survive mapping (hierarchy metadata only).
+_BENIGN_INTERNAL_CELLS = {"$scopeinfo"}
+
+
+def unmapped_cells(area_text: str) -> list[str]:
+    """Yosys internal ``$`` cells left in the mapped netlist, e.g. ``$print`` from a
+    ``$display`` in the DUT. Any of them means no standard-cell implementation."""
+    # new stat format: "    1    -   $print"; old: "     $print     1"
+    found = re.findall(r"^\s*(?:\d+\s+\S+\s+)?(\$\w+)(?:\s+\d+)?\s*$", area_text or "", re.MULTILINE)
+    return sorted(set(found) - _BENIGN_INTERNAL_CELLS)
+
+
 def parse_sta_report(sta_text: str) -> dict[str, Any]:
     """Parses OpenSTA output (file content or stdout) to extract slack."""
     out: dict[str, Any] = {"slack": None}
     if not sta_text:
         return out
 
-    # 1. Match OpenSTA endpoint line: "... 99.1807 20.5157 78.6649 (MET)"
-    m_table = re.search(r"([-.0-9]+)\s*\((?:MET|VIOLATED)\)", sta_text, flags=re.I)
-    if m_table:
-        out["slack"] = float(m_table.group(1))
+    # 1. Match OpenSTA endpoint lines: "... 99.1807 20.5157 78.6649 (MET)".
+    # One per path group (e.g. core_clock, asynchronous); report the worst.
+    slacks = re.findall(r"([-.0-9]+)\s*\((?:MET|VIOLATED)\)", sta_text, flags=re.I)
+    if slacks:
+        out["slack"] = min(float(s) for s in slacks)
         return out
 
     # 2. Match summary line: "slack (MET) 78.6649" or "slack -1.25"
@@ -165,9 +178,24 @@ def run_synthesis_gate(
     res.log = run.get("out", "")
     res.synthesizable = bool(run.get("ok")) and netlist_out.exists()
 
+    leftover: list[str] = []
     if area_out.exists():
-        a = parse_area_report(area_out.read_text(encoding="utf-8", errors="ignore"))
+        area_text = area_out.read_text(encoding="utf-8", errors="ignore")
+        a = parse_area_report(area_text)
         res.area, res.cells = a.get("chip_area"), a.get("cell_count")
+        leftover = unmapped_cells(area_text)
+
+    if res.synthesizable and leftover:
+        # Yosys "succeeds" but keeps behavioral cells it cannot map to the library
+        res.synthesizable = False
+        res.log += (
+            f"\nERROR: unmapped cells after technology mapping: {', '.join(leftover)}. "
+            "These have no standard-cell implementation (e.g. $print comes from "
+            "$display/$write/$monitor inside the design).\n"
+        )
+        res.error_categories = (["sim-only-system-task"] if "$print" in leftover else []) + \
+            (["non-synthesizable-construct"] if set(leftover) - {"$print"} else [])
+        return res
 
     if not res.synthesizable:
         res.error_categories = classify_errors(res.log)
