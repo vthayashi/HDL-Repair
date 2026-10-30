@@ -1,0 +1,9 @@
+accepted,best_iter,design,detectable_now,detected_categories,expected_category,final_compile_ok,final_equiv_pass,ingest_categories,ingest_compile_ok,ingest_equiv_pass,row,synth_verified,tokens
+True,2,aes_key_mem.v,True,,undefined-module,True,True,"undefined-module,late-syntax-error",False,False,0,False,7274
+True,2,aes_core.v,True,,undefined-module,True,True,late-syntax-error,False,False,1,False,4874
+True,2,aes.v,True,,non-synthesizable-construct,True,True,,True,False,2,False,4364
+True,1,aes_encipher_block.v,False,,non-synthesizable-construct,True,True,,True,True,3,False,0
+False,2,aes_decipher_block.v,True,late-syntax-error,late-syntax-error,True,False,late-syntax-error,False,False,4,False,28897
+True,2,aes_encipher_block.v,True,,undefined-module,True,True,late-syntax-error,False,False,5,False,8518
+True,1,aes_key_mem.v,False,,non-synthesizable-construct,True,True,,True,True,6,False,0
+True,1,aes_core.v,False,,sim-only-system-task,True,True,,True,True,7,False,0

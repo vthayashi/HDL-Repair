@@ -7,3 +7,4 @@ runs/
 *.sim
 *.sim.exe
 golden/aes/.git/
+venv/

@@ -1,0 +1,4 @@
+accepted,best_iter,design,detectable_now,detected_categories,expected_category,final_compile_ok,final_equiv_pass,ingest_categories,ingest_compile_ok,ingest_equiv_pass,row,synth_verified,tokens
+True,2,aes_key_mem.v,True,,undefined-module,True,True,"undefined-module,late-syntax-error",False,False,0,False,11566
+True,2,aes_core.v,True,,undefined-module,True,True,late-syntax-error,False,False,1,False,5343
+True,2,aes.v,True,,non-synthesizable-construct,True,True,,True,False,2,False,4780

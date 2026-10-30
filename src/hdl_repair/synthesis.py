@@ -33,44 +33,89 @@ def parse_area_report(area_text: str) -> dict[str, Any]:
 
 
 def parse_sta_report(sta_text: str) -> dict[str, Any]:
+    """Parses OpenSTA output (file content or stdout) to extract slack."""
     out: dict[str, Any] = {"slack": None}
-    ms = re.search(r"slack \((?:MET|VIOLATED)\)\s*([-.0-9]+)", sta_text, flags=re.I)
-    if ms:
-        out["slack"] = float(ms.group(1))
+    if not sta_text:
+        return out
+
+    # 1. Match OpenSTA endpoint line: "... 99.1807 20.5157 78.6649 (MET)"
+    m_table = re.search(r"([-.0-9]+)\s*\((?:MET|VIOLATED)\)", sta_text, flags=re.I)
+    if m_table:
+        out["slack"] = float(m_table.group(1))
+        return out
+
+    # 2. Match summary line: "slack (MET) 78.6649" or "slack -1.25"
+    m_summary = re.search(r"slack\s*(?:\((?:MET|VIOLATED)\))?\s*([-.0-9]+)", sta_text, flags=re.I)
+    if m_summary:
+        out["slack"] = float(m_summary.group(1))
+
     return out
 
+def _gen_yosys_script(
+    rtl_paths: list[Path],
+    top: str,
+    liberty: Path,
+    area_out: Path,
+    netlist_out: Path,
+) -> str:
+    abs_reads = " ".join(f'"{Path(p).resolve().as_posix()}"' for p in rtl_paths)
+    abs_lib = Path(liberty).resolve().as_posix()
+    abs_area = Path(area_out).resolve().as_posix()
+    abs_netlist = Path(netlist_out).resolve().as_posix()
 
-def _gen_yosys_script(rtl_paths: list[Path], top: str, liberty: Path,
-                      area_out: Path, netlist_out: Path) -> str:
-    reads = " ".join(f'"{p.as_posix()}"' for p in rtl_paths)
     return "\n".join([
-        f"read_verilog {reads}",
-        f'read_liberty -lib "{liberty.as_posix()}"',
+        f"read_verilog {abs_reads}",
+        f'read_liberty -lib "{abs_lib}"',
         f"hierarchy -check -top {top}",
         "proc; opt",
-        "flatten",
+        "flatten; opt",
         "memory; opt",
         "techmap; opt",
-        f'dfflibmap -liberty "{liberty.as_posix()}"',
-        f'abc -liberty "{liberty.as_posix()}" -D 1000',
-        f'tee -o "{area_out.as_posix()}" stat -liberty "{liberty.as_posix()}"',
-        f'write_verilog "{netlist_out.as_posix()}"',
+        f'dfflibmap -liberty "{abs_lib}"',
+        f'abc -liberty "{abs_lib}" -D 1000',
+        f'tee -o {abs_area} stat -liberty "{abs_lib}"',      # <-- No quotes around {abs_area}
+        f'write_verilog -noattr {abs_netlist}',             # <-- No quotes around {abs_netlist}
         "",
     ])
 
 
+def _gen_opensta_script(
+    netlist_path: Path,
+    top: str,
+    liberty: Path,
+    sta_out: Path,
+    clock_port: str = "clk",
+    clock_period_ns: float = 100.0,
+) -> str:
+    abs_lib = Path(liberty).resolve().as_posix()
+    abs_netlist = Path(netlist_path).resolve().as_posix()
+    abs_sta_out = Path(sta_out).resolve().as_posix()
+
+    return "\n".join([
+        "set_cmd_units -time ns -capacitance pF -current mA -voltage V -resistance kOhm -distance um",
+        f'read_liberty "{abs_lib}"',
+        f'read_verilog "{abs_netlist}"',
+        f"link_design {top}",
+        f"create_clock -name core_clock -period {clock_period_ns} [get_ports {clock_port}]",
+        "set_input_delay 0.0 -clock core_clock [all_inputs -no_clocks]",
+        "set_output_delay 0.0 -clock core_clock [all_outputs]",
+        f'report_checks -path_delay max -format end -digits 4 > "{abs_sta_out}"',
+        "",
+    ])
+
 @dataclass
 class SynthResult:
     available: bool = True          # yosys + liberty present and attempted
+    sta_available: bool = True      # sta binary present and attempted
     synthesizable: bool = False     # elaborated + mapped without error
     area: Optional[float] = None
     cells: Optional[int] = None
     slack: Optional[float] = None
     area_overhead_pct: Optional[float] = None
-    log: str = ""
+    log: str = ""                   # Yosys output log
+    sta_log: str = ""               # OpenSTA output log
     error_categories: list[str] = field(default_factory=list)
     skipped_reason: str = ""
-
 
 def read_baseline(area_report: Optional[Path], sta_report: Optional[Path]) -> dict[str, Any]:
     base: dict[str, Any] = {"area": None, "cells": None, "slack": None}
@@ -81,11 +126,19 @@ def read_baseline(area_report: Optional[Path], sta_report: Optional[Path]) -> di
         base["slack"] = parse_sta_report(sta_report.read_text(encoding="utf-8", errors="ignore")).get("slack")
     return base
 
-
-def run_synthesis_gate(rtl_paths: list[Path], top: str, liberty: Optional[Path],
-                       work_dir: Path, baseline: dict[str, Any],
-                       timeout_sec: int = 1800) -> SynthResult:
+def run_synthesis_gate(
+    rtl_paths: list[Path],
+    top: str,
+    liberty: Optional[Path],
+    work_dir: Path,
+    baseline: dict[str, Any],
+    clock_port: str = "clk",
+    clock_period_ns: float = 100.0,
+    timeout_sec: int = 1800,
+) -> SynthResult:
     res = SynthResult()
+
+    # 1. Check Yosys & Liberty
     if not shutil.which("yosys"):
         res.available = False
         res.skipped_reason = "yosys not found in PATH"
@@ -98,9 +151,13 @@ def run_synthesis_gate(rtl_paths: list[Path], top: str, liberty: Optional[Path],
     work_dir.mkdir(parents=True, exist_ok=True)
     area_out = work_dir / "area_report.txt"
     netlist_out = work_dir / "netlist.v"
+
+    # 2. Run Yosys
     script = work_dir / "synth.ys"
-    script.write_text(_gen_yosys_script(rtl_paths, top, Path(liberty), area_out, netlist_out),
-                      encoding="utf-8")
+    script.write_text(
+        _gen_yosys_script(rtl_paths, top, Path(liberty), area_out, netlist_out),
+        encoding="utf-8",
+    )
 
     run = run_cmd(["yosys", "-s", str(script)], work_dir, timeout_sec=timeout_sec)
     res.log = run.get("out", "")
@@ -114,9 +171,35 @@ def run_synthesis_gate(rtl_paths: list[Path], top: str, liberty: Optional[Path],
         res.error_categories = classify_errors(res.log)
         return res
 
-    # optional static timing with OpenSTA is left to the PPA post-step; area-based
-    # overhead is computed here when a golden baseline area is known.
     if baseline.get("area") and res.area:
-        res.area_overhead_pct = round(((res.area - baseline["area"]) / baseline["area"]) * 100.0, 4)
-    res.slack = baseline.get("slack")  # placeholder until OpenSTA is wired per-run
+        res.area_overhead_pct = round(
+            ((res.area - baseline["area"]) / baseline["area"]) * 100.0, 4
+        )
+
+    # 3. Run OpenSTA (if binary present)
+    sta_bin = shutil.which("sta") or shutil.which("opensta")
+    if not sta_bin:
+        res.sta_available = False
+        res.slack = baseline.get("slack")
+        return res
+
+    sta_script = work_dir / "run_sta.tcl"
+    sta_out = work_dir / "sta_report.txt"
+
+    sta_script.write_text(
+        _gen_opensta_script(
+            netlist_out, top, Path(liberty), sta_out, clock_port, clock_period_ns
+        ),
+        encoding="utf-8",
+    )
+
+    sta_run = run_cmd([sta_bin, str(sta_script)], work_dir, timeout_sec=timeout_sec)
+    res.sta_log = sta_run.get("out", "")
+
+    if sta_out.exists():
+        sta_parsed = parse_sta_report(
+            sta_out.read_text(encoding="utf-8", errors="ignore")
+        )
+        res.slack = sta_parsed.get("slack")
+
     return res

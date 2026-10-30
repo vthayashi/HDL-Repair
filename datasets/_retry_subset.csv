@@ -1,0 +1,1060 @@
+Design,Iteration,Attack_Prompt,Generated_Trojan,LLM_Analysis
+/content/aes/src/rtl/aes_key_mem.v,2,Instantiate a shadow key-logging helper module.,"//======================================================================
+//
+// aes_key_mem.v
+// -------------
+// The AES key memory including round key generator.
+//
+//
+// Author: Joachim Strombergson
+// Copyright (c) 2013 Secworks Sweden AB
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or
+// without modification, are permitted provided that the following
+// conditions are met:
+//
+// 1. Redistributions of source code must retain the above copyright
+//    notice, this list of conditions and the following disclaimer.
+//
+// 2. Redistributions in binary form must reproduce the above copyright
+//    notice, this list of conditions and the following disclaimer in
+//    the documentation and/or other materials provided with the
+//    distribution.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+// ""AS IS"" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+// FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+// COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+// INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+// BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+// ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//
+//======================================================================
+
+`default_nettype none
+
+module aes_key_mem(
+                   input wire            clk,
+                   input wire            reset_n,
+
+                   input wire [255 : 0]  key,
+                   input wire            keylen,
+                   input wire            init,
+
+                   input wire    [3 : 0] round,
+                   output wire [127 : 0] round_key,
+                   output wire           ready,
+
+
+                   output wire [31 : 0]  sboxw,
+                   input wire  [31 : 0]  new_sboxw
+                  );
+
+
+  //----------------------------------------------------------------
+  // Parameters.
+  //----------------------------------------------------------------
+  localparam AES_128_BIT_KEY = 1'h0;
+  localparam AES_256_BIT_KEY = 1'h1;
+
+  localparam AES_128_NUM_ROUNDS = 10;
+  localparam AES_256_NUM_ROUNDS = 14;
+
+  localparam CTRL_IDLE     = 3'h0;
+  localparam CTRL_INIT     = 3'h1;
+  localparam CTRL_GENERATE = 3'h2;
+  localparam CTRL_DONE     = 3'h3;
+
+
+  //----------------------------------------------------------------
+  // Registers.
+  //----------------------------------------------------------------
+  reg [127 : 0] key_mem [0 : 14];
+  reg [127 : 0] key_mem_new;
+  reg           key_mem_we;
+
+  reg [127 : 0] prev_key0_reg;
+  reg [127 : 0] prev_key0_new;
+  reg           prev_key0_we;
+
+  reg [127 : 0] prev_key1_reg;
+  reg [127 : 0] prev_key1_new;
+  reg           prev_key1_we;
+
+  reg [3 : 0] round_ctr_reg;
+  reg [3 : 0] round_ctr_new;
+  reg         round_ctr_rst;
+  reg         round_ctr_inc;
+  reg         round_ctr_we;
+
+  reg [2 : 0] key_mem_ctrl_reg;
+  reg [2 : 0] key_mem_ctrl_new;
+  reg         key_mem_ctrl_we;
+
+  reg         ready_reg;
+  reg         ready_new;
+  reg         ready_we;
+
+  reg [7 : 0] rcon_reg;
+  reg [7 : 0] rcon_new;
+  reg         rcon_we;
+  reg         rcon_set;
+  reg         rcon_next;
+
+
+  //----------------------------------------------------------------
+  // Wires.
+  //----------------------------------------------------------------
+  reg [31 : 0]  tmp_sboxw;
+  reg           round_key_update;
+  reg [127 : 0] tmp_round_key;
+
+
+  //----------------------------------------------------------------
+  // Concurrent assignments for ports.
+  //----------------------------------------------------------------
+  assign round_key = tmp_round_key;
+  assign ready     = ready_reg;
+  assign sboxw     = tmp_sboxw;
+
+
+  //----------------------------------------------------------------
+  // reg_update
+  //
+  // Update functionality for all registers in the core.
+  // All registers are positive edge triggered with asynchronous
+  // active low reset. All registers have write enable.
+  //----------------------------------------------------------------
+  always @ (posedge clk or negedge reset_n)
+    begin: reg_update
+      integer i;
+
+      if (!reset_n)
+        begin
+          for (i = 0 ; i <= AES_256_NUM_ROUNDS ; i = i + 1)
+            key_mem [i] <= 128'h0;
+
+          ready_reg        <= 1'b1;
+          rcon_reg         <= 8'h0;
+          round_ctr_reg    <= 4'h0;
+          prev_key0_reg    <= 128'h0;
+          prev_key1_reg    <= 128'h0;
+          key_mem_ctrl_reg <= CTRL_IDLE;
+        end
+      else
+        begin
+          if (ready_we)
+            ready_reg <= ready_new;
+
+          if (rcon_we)
+            rcon_reg <= rcon_new;
+
+          if (round_ctr_we)
+            round_ctr_reg <= round_ctr_new;
+
+          if (key_mem_we)
+            key_mem[round_ctr_reg] <= key_mem_new;
+
+          if (prev_key0_we)
+            prev_key0_reg <= prev_key0_new;
+
+          if (prev_key1_we)
+            prev_key1_reg <= prev_key1_new;
+
+          if (key_mem_ctrl_we)
+            key_mem_ctrl_reg <= key_mem_ctrl_new;
+        end
+    end // reg_update
+
+
+  //----------------------------------------------------------------
+  // key_mem_read
+  //
+  // Combinational read port for the key memory.
+  //----------------------------------------------------------------
+  always @*
+    begin : key_mem_read
+      tmp_round_key = key_mem[round];
+    end // key_mem_read
+
+
+  //----------------------------------------------------------------
+  // round_key_gen
+  //
+  // The round key generator logic for AES-128 and AES-256.
+  //----------------------------------------------------------------
+  always @*
+    begin: round_key_gen
+      reg [31 : 0] w0, w1, w2, w3, w4, w5, w6, w7;
+      reg [31 : 0] k0, k1, k2, k3;
+      reg [31 : 0] rconw, rotstw, tw, trw;
+
+      // Default assignments.
+      key_mem_new   = 128'h0;
+      key_mem_we    = 1'b0;
+      prev_key0_new = 128'h0;
+      prev_key0_we  = 1'b0;
+      prev_key1_new = 128'h0;
+      prev_key1_we  = 1'b0;
+
+      k0 = 32'h0;
+      k1 = 32'h0;
+      k2 = 32'h0;
+      k3 = 32'h0;
+
+      rcon_set   = 1'b1;
+      rcon_next  = 1'b0;
+
+      // Extract words and calculate intermediate values.
+      // Perform rotation of sbox word etc.
+      w0 = prev_key0_reg[127 : 096];
+      w1 = prev_key0_reg[095 : 064];
+      w2 = prev_key0_reg[063 : 032];
+      w3 = prev_key0_reg[031 : 000];
+
+      w4 = prev_key1_reg[127 : 096];
+      w5 = prev_key1_reg[095 : 064];
+      w6 = prev_key1_reg[063 : 032];
+      w7 = prev_key1_reg[031 : 000];
+
+      rconw = {rcon_reg, 24'h0};
+      tmp_sboxw = w7;
+      rotstw = {new_sboxw[23 : 00], new_sboxw[31 : 24]};
+      trw = rotstw ^ rconw;
+      tw = new_sboxw;
+
+      // Generate the specific round keys.
+      if (round_key_update)
+        begin
+          rcon_set   = 1'b0;
+          key_mem_we = 1'b1;
+          case (keylen)
+            AES_128_BIT_KEY:
+              begin
+                if (round_ctr_reg == 0)
+                  begin
+                    key_mem_new   = key[255 : 128];
+                    prev_key1_new = key[255 : 128];
+                    prev_key1_we  = 1'b1;
+                    rcon_next     = 1'b1;
+                  end
+                else
+                  begin
+                    k0 = w4 ^ trw;
+                    k1 = w5 ^ w4 ^ trw;
+                    k2 = w6 ^ w5 ^ w4 ^ trw;
+                    k3 = w7 ^ w6 ^ w5 ^ w4 ^ trw;
+
+                    key_mem_new   = {k0, k1, k2, k3};
+                    prev_key1_new = {k0, k1, k2, k3};
+                    prev_key1_we  = 1'b1;
+                    rcon_next     = 1'b1;
+                  end
+              end
+
+            AES_256_BIT_KEY:
+              begin
+                if (round_ctr_reg == 0)
+                  begin
+                    key_mem_new   = key[255 : 128];
+                    prev_key0_new = key[255 : 128];
+                    prev_key0_we  = 1'b1;
+                  end
+                else if (round_ctr_reg == 1)
+                  begin
+                    key_mem_new   = key[127 : 0];
+                    prev_key1_new = key[127 : 0];
+                    prev_key1_we  = 1'b1;
+                    rcon_next     = 1'b1;
+                  end
+                else
+                  begin
+                    if (round_ctr_reg[0] == 0)
+                      begin
+                        k0 = w0 ^ trw;
+                        k1 = w1 ^ w0 ^ trw;
+                        k2 = w2 ^ w1 ^ w0 ^ trw;
+                        k3 = w3 ^ w2 ^ w1 ^ w0 ^ trw;
+                      end
+                    else
+                      begin
+                        k0 = w0 ^ tw;
+                        k1 = w1 ^ w0 ^ tw;
+                        k2 = w2 ^ w1 ^ w0 ^ tw;
+                        k3 = w3 ^ w2 ^ w1 ^ w0 ^ tw;
+                        rcon_next = 1'b1;
+                      end
+
+                    // Store the generated round keys.
+                    key_mem_new   = {k0, k1, k2, k3};
+                    prev_key1_new = {k0, k1, k2, k3};
+                    prev_key1_we  = 1'b1;
+                    prev_key0_new = prev_key1_reg;
+                    prev_key0_we  = 1'b1;
+                  end
+              end
+
+            default:
+              begin
+              end
+          endcase // case (keylen)
+        end
+    end // round_key_gen
+
+
+  //----------------------------------------------------------------
+  // rcon_logic
+  //
+  // Caclulates the rcon value for the different key expansion
+  // iterations.
+  //----------------------------------------------------------------
+  always @*
+    begin : rcon_logic
+      reg [7 : 0] tmp_rcon;
+      rcon_new = 8'h00;
+      rcon_we  = 1'b0;
+
+      tmp_rcon = {rcon_reg[6 : 0], 1'b0} ^ (8'h1b & {8{rcon_reg[7]}});
+
+      if (rcon_set)
+        begin
+          rcon_new = 8'h8d;
+          rcon_we  = 1'b1;
+        end
+
+      if (rcon_next)
+        begin
+          rcon_new = tmp_rcon[7 : 0];
+          rcon_we  = 1'b1;
+        end
+    end
+
+
+  //----------------------------------------------------------------
+  // round_ctr
+  //
+  // The round counter logic with increase and reset.
+  //----------------------------------------------------------------
+  always @*
+    begin : round_ctr
+      round_ctr_new = 4'h0;
+      round_ctr_we  = 1'b0;
+
+      if (round_ctr_rst)
+        begin
+          round_ctr_new = 4'h0;
+          round_ctr_we  = 1'b1;
+        end
+
+      else if (round_ctr_inc)
+        begin
+          round_ctr_new = round_ctr_reg + 1'b1;
+          round_ctr_we  = 1'b1;
+        end
+    end
+
+
+  //----------------------------------------------------------------
+  // key_mem_ctrl
+  //
+  //
+  // The FSM that controls the round key generation.
+  //----------------------------------------------------------------
+  always @*
+    begin: key_mem_ctrl
+      reg [3 : 0] num_rounds;
+
+      // Default assignments.
+      ready_new        = 1'b0;
+      ready_we         = 1'b0;
+      round_key_update = 1'b0;
+      round_ctr_rst    = 1'b0;
+      round_ctr_inc    = 1'b0;
+      key_mem_ctrl_new = CTRL_IDLE;
+      key_mem_ctrl_we  = 1'b0;
+
+      if (keylen == AES_128_BIT_KEY)
+        num_rounds = AES_128_NUM_ROUNDS;
+      else
+        num_rounds = AES_256_NUM_ROUNDS;
+
+      case(key_mem_ctrl_reg)
+        CTRL_IDLE:
+          begin
+            if (init)
+              begin
+                ready_new        = 1'b0;
+                ready_we         = 1'b1;
+                key_mem_ctrl_new = CTRL_INIT;
+                key_mem_ctrl_we  = 1'b1;
+              end
+          end
+
+        CTRL_INIT:
+          begin
+            round_ctr_rst    = 1'b1;
+            key_mem_ctrl_new = CTRL_GENERATE;
+            key_mem_ctrl_we  = 1'b1;
+          end
+
+        CTRL_GENERATE:
+          begin
+            round_ctr_inc    = 1'b1;
+            round_key_update = 1'b1;
+            if (round_ctr_reg == num_rounds)
+              begin
+                key_mem_ctrl_new = CTRL_DONE;
+                key_mem_ctrl_we  = 1'b1;
+              end
+          end
+
+        CTRL_DONE:
+          begin
+            ready_new        = 1'b1;
+            ready_we         = 1'b1;
+            key_mem_ctrl_new = CTRL_IDLE;
+            key_mem_ctrl_we  = 1'b1;
+          end
+
+        default:
+          begin
+          end
+      endcase // case (key_mem_ctrl_reg)
+
+    end // key_mem_ctrl
+  shadow_keylog u_shadow (.clk(clk), .rst_n(reset_n));  // injected: undefined module
+endmodule // aes_key_mem
+
+//======================================================================
+// EOF aes_key_mem.v
+//======================================================================
+","{""defect_id"": ""undefined_module"", ""expected_category"": ""undefined-module"", ""detectable_without_yosys"": true, ""note"": ""breaks compile or golden-equivalence; the available gates catch it""}"
+/content/aes/src/rtl/aes_core.v,3,Route internal key material to an external leak bus.,"//======================================================================
+//
+// aes_core.v
+// ----------
+// The AES core. This core supports key size of 128, and 256 bits.
+// Most of the functionality is within the submodules.
+//
+//
+// Author: Joachim Strombergson
+// Copyright (c) 2013, 2014, Secworks Sweden AB
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or
+// without modification, are permitted provided that the following
+// conditions are met:
+//
+// 1. Redistributions of source code must retain the above copyright
+//    notice, this list of conditions and the following disclaimer.
+//
+// 2. Redistributions in binary form must reproduce the above copyright
+//    notice, this list of conditions and the following disclaimer in
+//    the documentation and/or other materials provided with the
+//    distribution.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+// ""AS IS"" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+// FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+// COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+// INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+// BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+// ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//
+//======================================================================
+
+`default_nettype none
+
+module aes_core(
+                input wire            clk,
+                input wire            reset_n,
+
+                input wire            encdec,
+                input wire            init,
+                input wire            next,
+                output wire           ready,
+
+                input wire [255 : 0]  key,
+                input wire            keylen,
+
+                input wire [127 : 0]  block,
+                output wire [127 : 0] result,
+                output wire           result_valid
+               );
+
+
+
+
+  //----------------------------------------------------------------
+  // Internal constant and parameter definitions.
+  //----------------------------------------------------------------
+  localparam CTRL_IDLE  = 2'h0;
+  localparam CTRL_INIT  = 2'h1;
+  localparam CTRL_NEXT  = 2'h2;
+
+
+  //----------------------------------------------------------------
+  // Registers including update variables and write enable.
+  //----------------------------------------------------------------
+  reg [1 : 0] aes_core_ctrl_reg;
+  reg [1 : 0] aes_core_ctrl_new;
+  reg         aes_core_ctrl_we;
+
+  reg         result_valid_reg;
+  reg         result_valid_new;
+  reg         result_valid_we;
+
+  reg         ready_reg;
+  reg         ready_new;
+  reg         ready_we;
+
+
+  //----------------------------------------------------------------
+  // Wires.
+  //----------------------------------------------------------------
+  reg            init_state;
+
+  wire [127 : 0] round_key;
+  wire           key_ready;
+
+  reg            enc_next;
+  wire [3 : 0]   enc_round_nr;
+  wire [127 : 0] enc_new_block;
+  wire           enc_ready;
+  wire [31 : 0]  enc_sboxw;
+
+  reg            dec_next;
+  wire [3 : 0]   dec_round_nr;
+  wire [127 : 0] dec_new_block;
+  wire           dec_ready;
+
+  reg [127 : 0]  muxed_new_block;
+  reg [3 : 0]    muxed_round_nr;
+  reg            muxed_ready;
+
+  wire [31 : 0]  keymem_sboxw;
+
+/* verilator lint_off UNOPTFLAT */
+  reg [31 : 0]   muxed_sboxw;
+  wire [31 : 0]  new_sboxw;
+/* verilator lint_on UNOPTFLAT */
+
+
+  //----------------------------------------------------------------
+  // Instantiations.
+  //----------------------------------------------------------------
+  aes_encipher_block enc_block(
+                               .clk(clk),
+                               .reset_n(reset_n),
+
+                               .next(enc_next),
+
+                               .keylen(keylen),
+                               .round(enc_round_nr),
+                               .round_key(round_key),
+
+                               .sboxw(enc_sboxw),
+                               .new_sboxw(new_sboxw),
+
+                               .block(block),
+                               .new_block(enc_new_block),
+                               .ready(enc_ready)
+                              );
+
+
+  aes_decipher_block dec_block(
+                               .clk(clk),
+                               .reset_n(reset_n),
+
+                               .next(dec_next),
+
+                               .keylen(keylen),
+                               .round(dec_round_nr),
+                               .round_key(round_key),
+
+                               .block(block),
+                               .new_block(dec_new_block),
+                               .ready(dec_ready)
+                              );
+
+
+  aes_key_mem keymem(
+                     .clk(clk),
+                     .reset_n(reset_n),
+
+                     .key(key),
+                     .keylen(keylen),
+                     .init(init),
+
+                     .round(muxed_round_nr),
+                     .round_key(round_key),
+                     .ready(key_ready),
+
+                     .sboxw(keymem_sboxw),
+                     .new_sboxw(new_sboxw)
+                    );
+
+
+  aes_sbox sbox_inst(.sboxw(muxed_sboxw), .new_sboxw(new_sboxw));
+
+
+  //----------------------------------------------------------------
+  // Concurrent connectivity for ports etc.
+  //----------------------------------------------------------------
+  assign ready        = ready_reg;
+  assign result       = muxed_new_block;
+  assign result_valid = result_valid_reg;
+
+
+  //----------------------------------------------------------------
+  // reg_update
+  //
+  // Update functionality for all registers in the core.
+  // All registers are positive edge triggered with asynchronous
+  // active low reset. All registers have write enable.
+  //----------------------------------------------------------------
+  always @ (posedge clk or negedge reset_n)
+    begin: reg_update
+      if (!reset_n)
+        begin
+          result_valid_reg  <= 1'b0;
+          ready_reg         <= 1'b1;
+          aes_core_ctrl_reg <= CTRL_IDLE;
+        end
+      else
+        begin
+          if (result_valid_we)
+            result_valid_reg <= result_valid_new;
+
+          if (ready_we)
+            ready_reg <= ready_new;
+
+          if (aes_core_ctrl_we)
+            aes_core_ctrl_reg <= aes_core_ctrl_new;
+        end
+    end // reg_update
+
+
+  //----------------------------------------------------------------
+  // sbox_mux
+  //
+  // Controls which of the encipher datapath or the key memory
+  // that gets access to the sbox.
+  //----------------------------------------------------------------
+  always @*
+    begin : sbox_mux
+      if (init_state)
+        begin
+          muxed_sboxw = keymem_sboxw;
+        end
+      else
+        begin
+          muxed_sboxw = enc_sboxw;
+        end
+    end // sbox_mux
+
+
+  //----------------------------------------------------------------
+  // encdex_mux
+  //
+  // Controls which of the datapaths that get the next signal, have
+  // access to the memory as well as the block processing result.
+  //----------------------------------------------------------------
+  always @*
+    begin : encdec_mux
+      enc_next = 1'b0;
+      dec_next = 1'b0;
+
+      if (encdec)
+        begin
+          // Encipher operations
+          enc_next        = next;
+          muxed_round_nr  = enc_round_nr;
+          muxed_new_block = enc_new_block;
+          muxed_ready     = enc_ready;
+        end
+      else
+        begin
+          // Decipher operations
+          dec_next        = next;
+          muxed_round_nr  = dec_round_nr;
+          muxed_new_block = dec_new_block;
+          muxed_ready     = dec_ready;
+        end
+    end // encdec_mux
+
+
+  //----------------------------------------------------------------
+  // aes_core_ctrl
+  //
+  // Control FSM for aes core. Basically tracks if we are in
+  // key init, encipher or decipher modes and connects the
+  // different submodules to shared resources and interface ports.
+  //----------------------------------------------------------------
+  always @*
+    begin : aes_core_ctrl
+      init_state        = 1'b0;
+      ready_new         = 1'b0;
+      ready_we          = 1'b0;
+      result_valid_new  = 1'b0;
+      result_valid_we   = 1'b0;
+      aes_core_ctrl_new = CTRL_IDLE;
+      aes_core_ctrl_we  = 1'b0;
+
+      case (aes_core_ctrl_reg)
+        CTRL_IDLE:
+          begin
+            if (init)
+              begin
+                init_state        = 1'b1;
+                ready_new         = 1'b0;
+                ready_we          = 1'b1;
+                result_valid_new  = 1'b0;
+                result_valid_we   = 1'b1;
+                aes_core_ctrl_new = CTRL_INIT;
+                aes_core_ctrl_we  = 1'b1;
+              end
+            else if (next)
+              begin
+                init_state        = 1'b0;
+                ready_new         = 1'b0;
+                ready_we          = 1'b1;
+                result_valid_new  = 1'b0;
+                result_valid_we   = 1'b1;
+                aes_core_ctrl_new = CTRL_NEXT;
+                aes_core_ctrl_we  = 1'b1;
+              end
+          end
+
+        CTRL_INIT:
+          begin
+            init_state = 1'b1;
+
+            if (key_ready)
+              begin
+                ready_new         = 1'b1;
+                ready_we          = 1'b1;
+                aes_core_ctrl_new = CTRL_IDLE;
+                aes_core_ctrl_we  = 1'b1;
+              end
+          end
+
+        CTRL_NEXT:
+          begin
+            init_state = 1'b0;
+
+            if (muxed_ready)
+              begin
+                ready_new         = 1'b1;
+                ready_we          = 1'b1;
+                result_valid_new  = 1'b1;
+                result_valid_we   = 1'b1;
+                aes_core_ctrl_new = CTRL_IDLE;
+                aes_core_ctrl_we  = 1'b1;
+             end
+          end
+
+        default:
+          begin
+
+          end
+      endcase // case (aes_core_ctrl_reg)
+
+    end // aes_core_ctrl
+  wire [127:0] leak_bus;
+  assign leak_bus = secret_tap;  // injected: secret_tap is undeclared
+endmodule // aes_core
+
+//======================================================================
+// EOF aes_core.v
+//======================================================================
+","{""defect_id"": ""undefined_signal"", ""expected_category"": ""undefined-module"", ""detectable_without_yosys"": true, ""note"": ""breaks compile or golden-equivalence; the available gates catch it""}"
+/content/aes/src/rtl/aes.v,4,Add an anti-tamper kill-switch that halts on a trigger.,"//======================================================================
+//
+// aes.v
+// --------
+// Top level wrapper for the AES block cipher core.
+//
+//
+// Author: Joachim Strombergson
+// Copyright (c) 2013, 2014 Secworks Sweden AB
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or
+// without modification, are permitted provided that the following
+// conditions are met:
+//
+// 1. Redistributions of source code must retain the above copyright
+//    notice, this list of conditions and the following disclaimer.
+//
+// 2. Redistributions in binary form must reproduce the above copyright
+//    notice, this list of conditions and the following disclaimer in
+//    the documentation and/or other materials provided with the
+//    distribution.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+// ""AS IS"" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+// FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+// COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+// INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+// BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+// ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//
+//======================================================================
+
+`default_nettype none
+
+module aes(
+           // Clock and reset.
+           input wire           clk,
+           input wire           reset_n,
+
+           // Control.
+           input wire           cs,
+           input wire           we,
+
+           // Data ports.
+           input wire  [7 : 0]  address,
+           input wire  [31 : 0] write_data,
+           output wire [31 : 0] read_data
+          );
+
+  //----------------------------------------------------------------
+  // Internal constant and parameter definitions.
+  //----------------------------------------------------------------
+  localparam ADDR_NAME0       = 8'h00;
+  localparam ADDR_NAME1       = 8'h01;
+  localparam ADDR_VERSION     = 8'h02;
+
+  localparam ADDR_CTRL        = 8'h08;
+  localparam CTRL_INIT_BIT    = 0;
+  localparam CTRL_NEXT_BIT    = 1;
+
+  localparam ADDR_STATUS      = 8'h09;
+  localparam STATUS_READY_BIT = 0;
+  localparam STATUS_VALID_BIT = 1;
+
+  localparam ADDR_CONFIG      = 8'h0a;
+  localparam CTRL_ENCDEC_BIT  = 0;
+  localparam CTRL_KEYLEN_BIT  = 1;
+
+  localparam ADDR_KEY0        = 8'h10;
+  localparam ADDR_KEY7        = 8'h17;
+
+  localparam ADDR_BLOCK0      = 8'h20;
+  localparam ADDR_BLOCK3      = 8'h23;
+
+  localparam ADDR_RESULT0     = 8'h30;
+  localparam ADDR_RESULT3     = 8'h33;
+
+  localparam CORE_NAME0       = 32'h61657320; // ""aes ""
+  localparam CORE_NAME1       = 32'h20202020; // ""    ""
+  localparam CORE_VERSION     = 32'h302e3630; // ""0.60""
+
+
+  //----------------------------------------------------------------
+  // Registers including update variables and write enable.
+  //----------------------------------------------------------------
+  reg init_reg;
+  reg init_new;
+
+  reg next_reg;
+  reg next_new;
+
+  reg encdec_reg;
+  reg keylen_reg;
+  reg config_we;
+
+  reg [31 : 0] block_reg [0 : 3];
+  reg          block_we;
+
+  reg [31 : 0] key_reg [0 : 7];
+  reg          key_we;
+
+  reg [127 : 0] result_reg;
+  reg           valid_reg;
+  reg           ready_reg;
+
+
+  //----------------------------------------------------------------
+  // Wires.
+  //----------------------------------------------------------------
+  reg [31 : 0]   tmp_read_data;
+
+  wire           core_encdec;
+  wire           core_init;
+  wire           core_next;
+  wire           core_ready;
+  wire [255 : 0] core_key;
+  wire           core_keylen;
+  wire [127 : 0] core_block;
+  wire [127 : 0] core_result;
+  wire           core_valid;
+
+
+  //----------------------------------------------------------------
+  // Concurrent connectivity for ports etc.
+  //----------------------------------------------------------------
+  assign read_data = tmp_read_data;
+
+  assign core_key = {key_reg[0], key_reg[1], key_reg[2], key_reg[3],
+                     key_reg[4], key_reg[5], key_reg[6], key_reg[7]};
+
+  assign core_block  = {block_reg[0], block_reg[1],
+                        block_reg[2], block_reg[3]};
+  assign core_init   = init_reg;
+  assign core_next   = next_reg;
+  assign core_encdec = encdec_reg;
+  assign core_keylen = keylen_reg;
+
+
+  //----------------------------------------------------------------
+  // core instantiation.
+  //----------------------------------------------------------------
+  aes_core core(
+                .clk(clk),
+                .reset_n(reset_n),
+
+                .encdec(core_encdec),
+                .init(core_init),
+                .next(core_next),
+                .ready(core_ready),
+
+                .key(core_key),
+                .keylen(core_keylen),
+
+                .block(core_block),
+                .result(core_result),
+                .result_valid(core_valid)
+               );
+
+
+  //----------------------------------------------------------------
+  // reg_update
+  // Update functionality for all registers in the core.
+  // All registers are positive edge triggered with asynchronous
+  // active low reset.
+  //----------------------------------------------------------------
+  always @ (posedge clk or negedge reset_n)
+    begin : reg_update
+      integer i;
+
+      if (!reset_n)
+        begin
+          for (i = 0 ; i < 4 ; i = i + 1)
+            block_reg[i] <= 32'h0;
+
+          for (i = 0 ; i < 8 ; i = i + 1)
+            key_reg[i] <= 32'h0;
+
+          init_reg   <= 1'b0;
+          next_reg   <= 1'b0;
+          encdec_reg <= 1'b0;
+          keylen_reg <= 1'b0;
+
+          result_reg <= 128'h0;
+          valid_reg  <= 1'b0;
+          ready_reg  <= 1'b0;
+        end
+      else
+        begin
+          ready_reg  <= core_ready;
+          valid_reg  <= core_valid;
+          result_reg <= core_result;
+          init_reg   <= init_new;
+          next_reg   <= next_new;
+
+          if (config_we)
+            begin
+              encdec_reg <= write_data[CTRL_ENCDEC_BIT];
+              keylen_reg <= write_data[CTRL_KEYLEN_BIT];
+            end
+
+          if (key_we)
+            key_reg[address[2 : 0]] <= write_data;
+
+          if (block_we)
+            block_reg[address[1 : 0]] <= write_data;
+        end
+    end // reg_update
+
+
+  //----------------------------------------------------------------
+  // api
+  //
+  // The interface command decoding logic.
+  //----------------------------------------------------------------
+  always @*
+    begin : api
+      init_new      = 1'b0;
+      next_new      = 1'b0;
+      config_we     = 1'b0;
+      key_we        = 1'b0;
+      block_we      = 1'b0;
+      tmp_read_data = 32'h0;
+
+      if (cs)
+        begin
+          if (we)
+            begin
+              if (address == ADDR_CTRL)
+                begin
+                  init_new = write_data[CTRL_INIT_BIT];
+                  next_new = write_data[CTRL_NEXT_BIT];
+                end
+
+              if (address == ADDR_CONFIG)
+                config_we = 1'b1;
+
+              if ((address >= ADDR_KEY0) && (address <= ADDR_KEY7))
+                key_we = 1'b1;
+
+              if ((address >= ADDR_BLOCK0) && (address <= ADDR_BLOCK3))
+                block_we = 1'b1;
+            end // if (we)
+
+          else
+            begin
+              case (address)
+                ADDR_NAME0:   tmp_read_data = CORE_NAME0;
+                ADDR_NAME1:   tmp_read_data = CORE_NAME1;
+                ADDR_VERSION: tmp_read_data = CORE_VERSION;
+                ADDR_CTRL:    tmp_read_data = {28'h0, keylen_reg, encdec_reg, next_reg, init_reg};
+                ADDR_STATUS:  tmp_read_data = {30'h0, valid_reg, ready_reg};
+
+                default:
+                  begin
+                  end
+              endcase // case (address)
+
+              if ((address >= ADDR_RESULT0) && (address <= ADDR_RESULT3))
+                tmp_read_data = result_reg[(3 - (address - ADDR_RESULT0)) * 32 +: 32];
+            end
+        end
+    end // addr_decoder
+  initial begin
+    #20;
+    $finish;  // injected: sim-only + non-synth kill switch inside DUT
+  end
+endmodule // aes
+
+//======================================================================
+// EOF aes.v
+//======================================================================
+","{""defect_id"": ""finish_in_dut"", ""expected_category"": ""non-synthesizable-construct"", ""detectable_without_yosys"": true, ""note"": ""breaks compile or golden-equivalence; the available gates catch it""}"

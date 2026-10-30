@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import itertools
 import json
 import shutil
 from dataclasses import asdict, dataclass, field
@@ -50,9 +51,11 @@ class IterationRecord:
     compile_ok: bool
     synthesizable: bool
     synth_available: bool
+    sta_available: bool
     equiv_pass: bool
     area: Optional[float]
     cells: Optional[int]
+    slack: Optional[float]
     area_overhead_pct: Optional[float]
     score: float
     decision: str                  # ACCEPT | CONTINUE
@@ -64,6 +67,8 @@ class IterationRecord:
 
 
 class RepairPipeline:
+    _RUN_COUNTER = itertools.count(1)
+
     def __init__(self, cfg: RepairConfig, spec: DesignSpec, verbose: bool = True):
         self.cfg = cfg
         self.spec = spec
@@ -88,17 +93,53 @@ class RepairPipeline:
     def _evaluate(self, candidate_path: Path, iter_dir: Path) -> dict[str, Any]:
         rtl_paths = self._compose_rtl_paths(candidate_path)
 
+        # 1. SIMULATION EVALUATION
+        sim_dir = iter_dir / "sim"
+        sim_dir.mkdir(parents=True, exist_ok=True)
         gate = run_equivalence_gate(
-            rtl_paths, self.spec.tb_file, iter_dir / "sim",
+            rtl_paths, self.spec.tb_file, sim_dir,
             timeout_sec=self.cfg.sim_timeout_sec, backend=self.cfg.sim_backend,
         )
 
+        # Always force-write simulation logs to disk
+        compile_log = getattr(gate, "compile_log", "") or "No compilation log generated."
+        sim_log = getattr(gate, "sim_log", "") or "No simulation log generated."
+        (sim_dir / "compile.log").write_text(compile_log, encoding="utf-8")
+        (sim_dir / "sim.log").write_text(sim_log, encoding="utf-8")
+
+        if not gate.compile_ok:
+            print(f"\n[EVAL ERROR] ❌ Compilation Failed for {candidate_path.name}! Check: {sim_dir / 'compile.log'}")
+        elif not gate.equiv_pass:
+            print(f"\n[EVAL ERROR] ❌ Equivalence / Testbench Failed for {candidate_path.name}! Check: {sim_dir / 'sim.log'}")
+
+        # 2. SYNTHESIS EVALUATION
         synth = None
-        if self.cfg.run_synthesis:
+        synth_dir = iter_dir / "synth"
+        synth_dir.mkdir(parents=True, exist_ok=True)
+
+        if not self.cfg.run_synthesis:
+            msg = "run_synthesis is set to FALSE in RepairConfig!"
+            print(f"\n[EVAL WARNING] ⚠️ SYNTHESIS SKIPPED: {msg}")
+            (synth_dir / "SYNTH_SKIPPED.txt").write_text(msg, encoding="utf-8")
+        else:
             synth = run_synthesis_gate(
                 rtl_paths, self.spec.top_module, self.spec.liberty,
-                iter_dir / "synth", self.baseline, timeout_sec=self.cfg.synth_timeout_sec,
+                synth_dir, self.baseline, timeout_sec=self.cfg.synth_timeout_sec,
             )
+
+            # Always force-write synthesis and OpenSTA logs to disk
+            yosys_log = getattr(synth, "log", "") or "No Yosys log captured."
+            sta_log = getattr(synth, "sta_log", "") or "No OpenSTA log captured."
+            (synth_dir / "yosys.log").write_text(yosys_log, encoding="utf-8")
+            (synth_dir / "opensta.log").write_text(sta_log, encoding="utf-8")
+
+            if not synth.available:
+                print(f"\n[EVAL ERROR] ❌ Yosys/Liberty Unavailable: {synth.skipped_reason}")
+                (synth_dir / "ERROR_UNAVAILABLE.txt").write_text(synth.skipped_reason, encoding="utf-8")
+            elif not synth.synthesizable:
+                print(f"\n[EVAL ERROR] ❌ Yosys Mapping Failed! Check: {synth_dir / 'yosys.log'}")
+            elif not synth.sta_available:
+                print(f"\n[EVAL WARNING] ⚠️ OpenSTA binary not found! Timing slack skipped.")
 
         return {"gate": gate, "synth": synth}
 
@@ -108,7 +149,9 @@ class RepairPipeline:
         module_name = module_name_of(candidate_text) or Path(self.spec.target_rtl).stem
 
         run_ts = dt.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        run_dir = RUNS_DIR / f"run_{run_ts}"
+        run_id = next(self._RUN_COUNTER)
+
+        run_dir = RUNS_DIR / f"run_{run_id:03d}_{self.spec.name}_{run_ts}"
         run_dir.mkdir(parents=True, exist_ok=True)
         jsonl_path = run_dir / "repair_iterations.jsonl"
         md_path = run_dir / "repair_iterations.md"
@@ -118,8 +161,11 @@ class RepairPipeline:
         self._log(f"baseline={self.baseline}")
         md_path.write_text(
             f"# Repair run {run_ts}\n\n"
-            f"- design: {self.spec.name}\n- target_rtl: {self.spec.target_rtl}\n"
-            f"- input: {input_rtl}\n- max_iterations: {self.cfg.max_iterations}\n\n",
+            f"- design: {self.spec.name}\n"
+            f"- target_rtl: {self.spec.target_rtl}\n"
+            f"- input: {input_rtl}\n"
+            f"- max_iterations: {self.cfg.max_iterations}\n"
+            f"- baseline: area={self.baseline.get('area')}, cells={self.baseline.get('cells')}, slack={self.baseline.get('slack')}\n\n",
             encoding="utf-8",
         )
 
@@ -149,7 +195,6 @@ class RepairPipeline:
                 total_tokens += int(usage.get("total_tokens", 0))
                 if not rep.get("ok"):
                     self._log(f"iteration {i}: repair did not yield a valid module: {rep.get('errors')}")
-                    # keep previous candidate; record and stop if no progress possible
                     if not self.client.available:
                         self._log("LLM unavailable; stopping repair loop after ingest evaluation.")
                         break
@@ -165,9 +210,11 @@ class RepairPipeline:
             synth = ev["synth"]
 
             synth_available = bool(synth.available) if synth is not None else False
+            sta_available = bool(synth.sta_available) if synth is not None else False
             synthesizable = bool(synth.synthesizable) if (synth and synth.available) else False
             area = synth.area if synth else None
             cells = synth.cells if synth else None
+            slack = synth.slack if synth else None
             overhead = synth.area_overhead_pct if synth else None
 
             # Issue categories come from whichever gate failed.
@@ -188,17 +235,18 @@ class RepairPipeline:
 
             self._log(
                 f"iteration {i}: compile_ok={gate.compile_ok} synthesizable={synthesizable} "
-                f"(avail={synth_available}) equiv_pass={gate.equiv_pass} score={score} -> {decision}"
+                f"(avail={synth_available}, sta_avail={sta_available}) equiv_pass={gate.equiv_pass} score={score} -> {decision}"
             )
 
             rec = IterationRecord(
                 iter_id=i, timestamp=_now_iso(), phase=phase, model_used=model_used,
                 total_tokens=total_tokens, compile_ok=gate.compile_ok,
                 synthesizable=synthesizable, synth_available=synth_available,
-                equiv_pass=gate.equiv_pass, area=area, cells=cells,
-                area_overhead_pct=overhead, score=score, decision=decision,
-                issue_categories=categories, candidate_path=str(candidate_path),
-                candidate_hash=_sha(candidate_text), log_tail=log_tail,
+                sta_available=sta_available, equiv_pass=gate.equiv_pass,
+                area=area, cells=cells, slack=slack, area_overhead_pct=overhead,
+                score=score, decision=decision, issue_categories=categories,
+                candidate_path=str(candidate_path), candidate_hash=_sha(candidate_text),
+                log_tail=log_tail,
             )
 
             # --- analyst (only if continuing) ------------------------------------
@@ -222,11 +270,15 @@ class RepairPipeline:
             with md_path.open("a", encoding="utf-8") as f:
                 f.write(
                     f"\n## Iteration {i} ({phase})\n"
-                    f"- compile_ok: {rec.compile_ok}\n- synthesizable: {rec.synthesizable} "
-                    f"(available: {rec.synth_available})\n- equiv_pass: {rec.equiv_pass}\n"
-                    f"- area: {rec.area}  cells: {rec.cells}  overhead%: {rec.area_overhead_pct}\n"
-                    f"- score: {rec.score}\n- decision: {rec.decision}\n"
-                    f"- issues: {rec.issue_categories}\n- candidate: {rec.candidate_path}\n"
+                    f"- compile_ok: {rec.compile_ok}\n"
+                    f"- synthesizable: {rec.synthesizable} (available: {rec.synth_available})\n"
+                    f"- equiv_pass: {rec.equiv_pass}\n"
+                    f"- Yosys Metrics: area={rec.area}, cells={rec.cells}, area_overhead_pct={rec.area_overhead_pct}%\n"
+                    f"- OpenSTA Metrics: slack={rec.slack} (sta_available: {rec.sta_available})\n"
+                    f"- score: {rec.score}\n"
+                    f"- decision: {rec.decision}\n"
+                    f"- issues: {rec.issue_categories}\n"
+                    f"- candidate: {rec.candidate_path}\n"
                 )
 
             cur_rank = rank_tuple(gate.compile_ok, synthesizable, gate.equiv_pass, score)
@@ -254,6 +306,7 @@ class RepairPipeline:
             "input": str(input_rtl),
             "accepted": accepted,
             "synthesis_verified": bool(best and best.synth_available),
+            "sta_verified": bool(best and best.sta_available),
             "best_iteration": asdict(best) if best else None,
             "baseline": self.baseline,
             "total_tokens_est": total_tokens,
@@ -262,5 +315,5 @@ class RepairPipeline:
             "repaired_rtl": str(repaired_dir / self.spec.target_rtl) if best else None,
         }
         (run_dir / "repair_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
-        self._log(f"run finished: accepted={accepted} synthesis_verified={summary['synthesis_verified']}")
+        self._log(f"run finished: accepted={accepted} synthesis_verified={summary['synthesis_verified']} sta_verified={summary['sta_verified']}")
         return summary

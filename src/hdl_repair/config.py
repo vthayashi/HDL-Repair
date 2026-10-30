@@ -85,11 +85,12 @@ class RepairConfig:
     temperature_repairer: float = 0.20
     temperature_analyst: float = 0.0
 
-    # Network resiliency
-    hf_http_retries: int = 4
+    # Network resiliency — tuned to fail fast so a flaky connection does not
+    # stall a batch for minutes (a single call is bounded to a few seconds).
+    hf_http_retries: int = 2
     hf_http_backoff_base_sec: float = 1.0
-    hf_http_backoff_cap_sec: float = 12.0
-    hf_http_timeout_sec: int = 120
+    hf_http_backoff_cap_sec: float = 6.0
+    hf_http_timeout_sec: int = 45
 
     # Candidate quality
     max_candidate_gen_retries: int = 3
@@ -103,7 +104,7 @@ class RepairConfig:
     sim_backend: str = "auto"          # auto | fusesoc | iverilog
     run_synthesis: bool = True         # synthesizability gate via Yosys
     run_ppa: bool = True               # collect area/timing metrics (needs yosys/sta)
-    sim_timeout_sec: int = 600
+    sim_timeout_sec: int = 90
     synth_timeout_sec: int = 1800
 
 
@@ -128,10 +129,10 @@ def load_config(env_dir: Optional[Path] = None) -> RepairConfig:
         model_analyst_fallbacks=split_csv(g("HF_MODEL_ANALYST_FALLBACKS", "")),
         max_tokens_repairer=int(g("HF_MAX_TOKENS_REPAIRER", "6000")),
         max_tokens_analyst=int(g("HF_MAX_TOKENS_ANALYST", "1200")),
-        hf_http_retries=int(g("HF_HTTP_RETRIES", "4")),
+        hf_http_retries=int(g("HF_HTTP_RETRIES", "2")),
         hf_http_backoff_base_sec=float(g("HF_HTTP_BACKOFF_BASE_SEC", "1.0")),
-        hf_http_backoff_cap_sec=float(g("HF_HTTP_BACKOFF_CAP_SEC", "12.0")),
-        hf_http_timeout_sec=int(g("HF_HTTP_TIMEOUT_SEC", "120")),
+        hf_http_backoff_cap_sec=float(g("HF_HTTP_BACKOFF_CAP_SEC", "6.0")),
+        hf_http_timeout_sec=int(g("HF_HTTP_TIMEOUT_SEC", "45")),
         max_candidate_gen_retries=int(g("MAX_CANDIDATE_GEN_RETRIES", "3")),
         min_rtl_chars=int(g("MIN_RTL_CHARS", "500")),
         max_iterations=int(g("MAX_ITERATIONS", "8")),
@@ -139,7 +140,7 @@ def load_config(env_dir: Optional[Path] = None) -> RepairConfig:
         sim_backend=g("RUN_SIM_BACKEND", "auto"),
         run_synthesis=g("RUN_SYNTHESIS", "1") not in ("0", "false", "False"),
         run_ppa=g("RUN_PPA", "1") not in ("0", "false", "False"),
-        sim_timeout_sec=int(g("SIM_TIMEOUT_SEC", "600")),
+        sim_timeout_sec=int(g("SIM_TIMEOUT_SEC", "90")),
         synth_timeout_sec=int(g("SYNTH_TIMEOUT_SEC", "1800")),
     )
     return cfg

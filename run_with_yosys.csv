@@ -1,0 +1,13 @@
+accepted,area,best_iter,cells,design,detectable_now,detected_categories,expected_category,final_compile_ok,final_equiv_pass,ingest_categories,ingest_compile_ok,ingest_equiv_pass,row,slack,sta_verified,synth_verified,tokens
+False,,1,,aes_sbox.v,True,"late-syntax-error,undefined-module",late-syntax-error,False,False,"late-syntax-error,undefined-module",False,False,0,,True,True,0
+False,,1,,aes_inv_sbox.v,True,"late-syntax-error,undefined-module",late-syntax-error,False,False,"late-syntax-error,undefined-module",False,False,1,,True,True,0
+False,,1,,aes_key_mem.v,True,"undefined-module,late-syntax-error",undefined-module,False,False,"undefined-module,late-syntax-error",False,False,2,,True,True,0
+False,,1,,aes_core.v,True,late-syntax-error,undefined-module,False,False,late-syntax-error,False,False,3,,True,True,0
+False,,1,,aes.v,True,"sim-only-system-task,undefined-module,late-syntax-error",non-synthesizable-construct,True,False,"sim-only-system-task,undefined-module,late-syntax-error",True,False,4,,True,True,0
+False,,1,,aes_encipher_block.v,False,"undefined-module,late-syntax-error",non-synthesizable-construct,True,True,"undefined-module,late-syntax-error",True,True,5,,True,True,0
+False,,1,,aes_decipher_block.v,True,"late-syntax-error,undefined-module,invalid-nesting",late-syntax-error,False,False,"late-syntax-error,undefined-module,invalid-nesting",False,False,6,,True,True,0
+False,,1,,aes_encipher_block.v,True,"late-syntax-error,undefined-module",undefined-module,False,False,"late-syntax-error,undefined-module",False,False,7,,True,True,0
+False,,1,,aes_inv_sbox.v,True,"late-syntax-error,undefined-module",invalid-nesting,False,False,"late-syntax-error,undefined-module",False,False,8,,True,True,0
+False,169906.704,1,18483,aes_sbox.v,True,"sim-only-system-task,late-syntax-error",functional-equivalence,True,False,"sim-only-system-task,late-syntax-error",True,False,9,79.2455,True,True,0
+True,169677.7344,1,18484,aes_key_mem.v,False,,non-synthesizable-construct,True,True,,True,True,10,79.233,True,True,0
+True,169207.2832,1,18612,aes_core.v,False,,sim-only-system-task,True,True,,True,True,11,78.6502,True,True,0

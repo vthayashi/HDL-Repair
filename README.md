@@ -51,6 +51,13 @@ pip install -r requirements.txt
 cp .env.example .env            # preencha HF_TOKEN
 ```
 
+```bash
+python -m venv venv
+source venv/bin/activate   # Linux
+pip install -r requirements.txt
+source .env
+```
+
 Ferramentas externas esperadas no PATH:
 - `iverilog` + `vvp` — compilação e simulação (obrigatório p/ os gates de
   compilação e equivalência).

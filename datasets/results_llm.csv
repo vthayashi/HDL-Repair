@@ -1,0 +1,13 @@
+accepted,best_iter,design,detectable_now,detected_categories,expected_category,final_compile_ok,final_equiv_pass,ingest_categories,ingest_compile_ok,ingest_equiv_pass,row,synth_verified,tokens
+False,1,aes_sbox.v,True,late-syntax-error,late-syntax-error,False,False,late-syntax-error,False,False,0,False,0
+False,1,aes_inv_sbox.v,True,late-syntax-error,late-syntax-error,False,False,late-syntax-error,False,False,1,False,0
+False,1,aes_key_mem.v,True,"undefined-module,late-syntax-error",undefined-module,False,False,"undefined-module,late-syntax-error",False,False,2,False,0
+False,1,aes_core.v,True,late-syntax-error,undefined-module,False,False,"undefined-module,late-syntax-error",False,False,3,False,0
+False,1,aes.v,True,,non-synthesizable-construct,True,False,"undefined-module,late-syntax-error",False,False,4,False,0
+True,1,aes_encipher_block.v,False,,non-synthesizable-construct,True,True,,True,True,5,False,0
+False,1,aes_decipher_block.v,True,late-syntax-error,late-syntax-error,False,False,late-syntax-error,False,False,6,False,0
+False,1,aes_encipher_block.v,True,late-syntax-error,undefined-module,False,False,late-syntax-error,False,False,7,False,0
+False,1,aes_inv_sbox.v,True,late-syntax-error,invalid-nesting,False,False,late-syntax-error,False,False,8,False,0
+False,1,aes_sbox.v,True,late-syntax-error,functional-equivalence,True,False,late-syntax-error,False,False,9,False,0
+True,1,aes_key_mem.v,False,,non-synthesizable-construct,True,True,,True,True,10,False,0
+True,1,aes_core.v,False,,sim-only-system-task,True,True,,True,True,11,False,0
