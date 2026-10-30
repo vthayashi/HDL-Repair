@@ -6,7 +6,7 @@
 
 ## Motivation
 
-Recent work (arXiv:2603.11287, *Synthesis-in-the-Loop Evaluation of LLMs for RTL*)
+Recent work ([*Synthesis-in-the-Loop Evaluation of LLMs for RTL Generation: Quality, Reliability, and Failure Modes*, arXiv:2603.11287](https://arxiv.org/abs/2603.11287))
 shows that LLM-generated HDL is frequently not synthesizable. That evaluation is
 limited to **single-turn, zero-shot** generation and leaves **iterative refinement
 with synthesis feedback** as future work.
