@@ -63,6 +63,113 @@ module. Row #5's rewrite of the `initial` block yields a slightly different but
 equivalent implementation. Row #6's smaller, "faster" netlist is a symptom of the
 lost logic, not an improvement.
 
+## Execution time
+
+Measured per step for every iteration (`datasets/iterations.csv`, built by
+`tools/summarize_runs.py`; see [How timings are measured](#how-timings-are-measured)).
+Machine: Windows 11, OSS CAD Suite 2026-10-30 (Icarus Verilog 14, Yosys 0.70),
+OpenSTA 3.1.0 under WSL2; LLMs through the Hugging Face Inference Router.
+
+### Per example
+
+| # | Module | Outcome | Iter. | Gates (s) | Repair LLM (s) | Analyst LLM (s) | Total (s) | LLM share |
+|---|---|---|:-:|--:|--:|--:|--:|--:|
+| 0 | aes_sbox.v | repaired | 2 | 18.9 | 148.9 | 103.6 | 271.5 | 93 % |
+| 1 | aes_inv_sbox.v | repaired | 2 | 18.4 | 203.8 | 75.1 | 297.3 | 94 % |
+| 2 | aes_key_mem.v | repaired | 2 | 20.3 | 164.4 | 48.2 | 232.9 | 91 % |
+| 3 | aes_core.v | repaired | 2 | 18.3 | 117.6 | 53.7 | 189.6 | 90 % |
+| 4 | aes.v | repaired | 2 | 19.4 | 81.0 | 53.6 | 153.9 | 87 % |
+| 5 | aes_encipher_block.v | repaired | 2 | 19.5 | 158.6 | 86.9 | 265.0 | 93 % |
+| 6 | aes_decipher_block.v | not equivalent | 3 | 39.1 | 399.4 | 185.4 | 623.9 | 94 % |
+| 7 | aes_encipher_block.v | repaired | 2 | 17.4 | 202.9 | 116.9 | 337.1 | 95 % |
+| 8 | aes_inv_sbox.v | repaired | 2 | 18.1 | 278.3 | 122.5 | 418.8 | 96 % |
+| 9 | aes_sbox.v | repaired | 2 | 30.7 | 155.4 | 32.7 | 218.8 | 86 % |
+| 10 | aes_key_mem.v | undetected | 1 | 13.3 | — | — | 13.3 | 0 % |
+| 11 | aes_core.v | repaired | 2 | 32.8 | 86.7 | 64.5 | 184.0 | 82 % |
+| | **Total** | | | **266.2** | **1,996.9** | **943.1** | **3,206.1** (53.4 min) | **92 %** |
+
+A successful repair takes **2.6–7.0 min** end to end (median 4.2 min over the 10
+repairs). The gates cost ~19 s per full iteration; the rest is LLM generation.
+
+### By step
+
+| Step | Calls | Total (s) | Mean (s) | Range (s) | Share of run time |
+|---|--:|--:|--:|--:|--:|
+| Repair LLM (DeepSeek-V3) | 12 | 1,996.9 | 166.4 | 81.0–278.3 | 62.3 % |
+| Analyst LLM (DeepSeek-R1) | 13 | 943.1 | 72.5 | 32.7–122.5 | 29.4 % |
+| Yosys synthesis | 24 | 176.7 | 7.4 | 0.05–13.0 | 5.5 % |
+| OpenSTA | 14 | 76.2 | 5.4 | 1.3–6.8 | 2.4 % |
+| Simulation (`vvp`, golden testbench) | 17 | 8.6 | 0.5 | 0.06–0.8 | 0.3 % |
+| Compilation (`iverilog`) | 24 | 4.5 | 0.2 | 0.13–0.83 | 0.1 % |
+
+### Tool runtime per gate
+
+Over the 14 iterations that ran the full flow (compile → simulate → synthesize
+→ time) on the whole `aes` design (~18.7k cells):
+
+| Gate | Median (s) | Range (s) |
+|---|--:|--:|
+| Compilation (iverilog) | 0.14 | 0.13–0.83 |
+| Simulation (25 test cases) | 0.51 | 0.39–0.82 |
+| Synthesis (Yosys → sky130, ABC) | 11.62 | 10.84–12.97 |
+| Static timing (OpenSTA) | 6.04 | 1.33–6.82 |
+| **All gates** | **≈18.3** | |
+
+Failing candidates are cheaper: a syntax error stops Yosys within 0.05–0.4 s and
+skips STA. OpenSTA times include starting the WSL process that hosts it.
+
+## LLM usage
+
+| Role | Calls | Usable replies | Tokens / call | Time / call (s) |
+|---|--:|--:|--:|--:|
+| Repairer (DeepSeek-V3) | 12 | 12 (100 %) | 8,786 (5,295–11,152) | 166 (81–278) |
+| Analyst (DeepSeek-R1) | 13 | 7 (54 %) | 5,993 when usable | 86 usable / 57 empty |
+
+- **Every repairer call returned a complete, structurally valid module**, and 10 of
+  the 12 produced an accepted design on the first attempt.
+- **The analyst returned an empty answer in 6 of 13 calls** (rows 2, 3, 4 and all
+  three iterations of 6). The loop then falls back to the deterministic analyst,
+  which derives repair actions from the gate taxonomy, so no repair was lost, but
+  ~5.7 min were spent waiting on empty replies. The likely cause is R1's reasoning
+  exhausting `HF_MAX_TOKENS_ANALYST` (1,200) before any answer text; their tokens
+  are not included in the totals above.
+
+## Defect classification at ingest
+
+Categories reported by the gate taxonomy (`classify_errors`) on the unmodified
+input, against the injected defect:
+
+| # | Injected category | Failing gates | Reported categories | Expected reported? |
+|---|---|---|---|:-:|
+| 0 | late-syntax-error | C S E | late-syntax-error, undefined-module | ✓ |
+| 1 | late-syntax-error | C S E | late-syntax-error, undefined-module | ✓ |
+| 2 | undefined-module | C S E | undefined-module, late-syntax-error | ✓ |
+| 3 | undefined-module | C S E | late-syntax-error, undefined-module | ✓ |
+| 4 | non-synthesizable-construct | S E | sim-only-system-task, undefined-module | ~ (`$finish`) |
+| 5 | non-synthesizable-construct | S | undefined-module | ✗ |
+| 6 | late-syntax-error | C S E | late-syntax-error, undefined-module, invalid-nesting | ✓ |
+| 7 | undefined-module | C S E | late-syntax-error, undefined-module | ✓ |
+| 8 | invalid-nesting | C S E | late-syntax-error, undefined-module | ✗ |
+| 9 | functional-equivalence | E | sim-only-system-task, late-syntax-error | n/a |
+| 10 | non-synthesizable-construct | — | — | n/a |
+| 11 | sim-only-system-task | S | sim-only-system-task | ✓ |
+
+C = compile, S = synthesis, E = equivalence. The expected category is reported in
+**7 of the 10** classifiable cases (8 counting `$finish` as a simulation-only
+task). Precision is low: `undefined-module` appears in 9 of 11 detected cases,
+and functional mismatches pick up spurious categories from testbench output.
+Classification only steers the repair prompt, so this did not prevent repairs, but
+it is the clearest target for improving the analyst.
+
+### How timings are measured
+
+New runs record each step's wall-clock time in `repair_iterations.jsonl`
+(`timings`). The run above predates that field, so `tools/summarize_runs.py`
+reconstructs the steps from the timestamps of the files each one writes (iteration
+directory → candidate → `equiv.sim` → `sim.log` → `run_sta.tcl` → `opensta.log` →
+next iteration). The reconstruction matches the console log to within a second
+(e.g. row 0: 271.5 s vs 272 s).
+
 ## Synthesis gate: unmapped cells
 
 Yosys does not reject `$display`/`$write` inside a design. It keeps them as an
@@ -76,7 +183,8 @@ Without that check, example #11 was accepted unchanged.
 
 | File | Contents |
 |---|---|
-| `results.csv` | per-example gate results, PPA and tokens for the run above |
+| `results.csv` | per-example gate results, PPA, tokens, wall-clock and run directory for the run above |
+| `iterations.csv` | one row per iteration: gate results, analyst source, tokens and per-step timings (`tools/summarize_runs.py`) |
 | `AES_repaired_examples.csv` | defective input (`Defective_Code`) and tool output (`Repaired_Code`) per example, with status, iterations and tokens |
 | `AES_defective_examples.csv` | input dataset (built by `tools/make_aes_dataset.py`) |
 | `results_fast.csv`, `results_retry.csv`, `results_llm.csv`, `results_all_examples.csv`, `results_yosys_ingest.csv` (+ `_fast_subset.csv`, `_retry_subset.csv`) | earlier runs without the synthesis/timing gates, kept for reference |

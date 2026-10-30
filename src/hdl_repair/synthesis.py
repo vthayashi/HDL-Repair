@@ -131,6 +131,8 @@ class SynthResult:
     sta_log: str = ""               # OpenSTA output log
     error_categories: list[str] = field(default_factory=list)
     skipped_reason: str = ""
+    yosys_sec: float = 0.0
+    sta_sec: float = 0.0
 
 def read_baseline(area_report: Optional[Path], sta_report: Optional[Path]) -> dict[str, Any]:
     base: dict[str, Any] = {"area": None, "cells": None, "slack": None}
@@ -176,6 +178,7 @@ def run_synthesis_gate(
 
     run = run_cmd(["yosys", "-s", str(script)], work_dir, timeout_sec=timeout_sec)
     res.log = run.get("out", "")
+    res.yosys_sec = run.get("sec", 0.0)
     res.synthesizable = bool(run.get("ok")) and netlist_out.exists()
 
     leftover: list[str] = []
@@ -225,6 +228,7 @@ def run_synthesis_gate(
 
     sta_run = run_cmd([sta_bin, str(sta_script)], work_dir, timeout_sec=timeout_sec)
     res.sta_log = sta_run.get("out", "")
+    res.sta_sec = sta_run.get("sec", 0.0)
 
     if sta_out.exists():
         sta_parsed = parse_sta_report(

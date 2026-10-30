@@ -149,6 +149,7 @@ tools/
   make_aes_dataset.py  # builds the defective-AES dataset (injected defects)
   run_dataset.py       # batch runner over a dataset CSV
   sanity_check.py      # Yosys + OpenSTA on the clean golden model
+  summarize_runs.py    # per-iteration timings/tokens/gates from a dataset run
 datasets/        # input dataset, results and repaired code (see RESULTS.md)
 examples/        # selected input/output RTL files (see docs/synthesis_gate.md)
 cases/aes/       # sample input files to repair
@@ -171,6 +172,8 @@ gates active (iverilog, Yosys/sky130, golden testbench) and OpenSTA timing:
 
 Repaired designs match the golden's area (167,613 µm², 0.000 % overhead in 9 of
 10) and worst slack (74.08 ns at 100 ns), at 12.9k tokens per repair on average.
+A repair takes 2.6–7.0 min end to end (median 4.2 min), ~92 % of it LLM
+generation; the four gates together take ~18 s on the full AES design.
 Of the 3 defects invisible to simulation, the synthesis gate catches 2. See
 [`datasets/RESULTS.md`](datasets/RESULTS.md) for the per-example table and
 reproduction steps.

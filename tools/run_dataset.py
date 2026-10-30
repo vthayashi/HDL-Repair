@@ -17,6 +17,7 @@ import csv
 import io
 import json
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -80,7 +81,9 @@ def main() -> int:
 
         try:
             # Enable verbose=True to print execution alerts and progress to stdout
+            t0 = time.perf_counter()
             summary = RepairPipeline(cfg, spec, verbose=True).run(in_path)
+            wall_sec = round(time.perf_counter() - t0, 1)
             best = summary.get("best_iteration") or {}
             res = {
                 "row": i,
@@ -99,6 +102,8 @@ def main() -> int:
                 "best_iter": best.get("iter_id"),
                 "detected_categories": ",".join(best.get("issue_categories", []) or []),
                 "tokens": summary.get("total_tokens_est"),
+                "wall_sec": wall_sec,
+                "run_dir": Path(summary["run_dir"]).name,
             }
             # recover iter-1 (ingest) detection from the jsonl
             try:

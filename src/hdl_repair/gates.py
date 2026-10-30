@@ -18,12 +18,21 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 
 def run_cmd(cmd: list[str], cwd: Path, timeout_sec: int = 300) -> dict[str, Any]:
+    """Run a tool; the result carries its wall-clock time in ``sec``."""
+    start = time.perf_counter()
+    res = _run_cmd(cmd, cwd, timeout_sec)
+    res["sec"] = round(time.perf_counter() - start, 3)
+    return res
+
+
+def _run_cmd(cmd: list[str], cwd: Path, timeout_sec: int) -> dict[str, Any]:
     try:
         proc = subprocess.run(
             cmd,
@@ -100,6 +109,8 @@ class GateResult:
     sim_log: str = ""
     error_categories: list[str] = field(default_factory=list)
     backend: str = "iverilog"
+    compile_sec: float = 0.0
+    sim_sec: float = 0.0
 
     @property
     def log_tail(self) -> str:
@@ -124,6 +135,7 @@ def _simulate_iverilog(rtl_paths: list[Path], tb_path: Path, work_dir: Path,
         timeout_sec=timeout_sec,
     )
     res.compile_log = comp.get("out", "")
+    res.compile_sec = comp.get("sec", 0.0)
     res.compile_ok = comp.get("ok", False)
     if not res.compile_ok:
         res.error_categories = classify_errors(res.compile_log)
@@ -140,6 +152,7 @@ def _simulate_iverilog(rtl_paths: list[Path], tb_path: Path, work_dir: Path,
         run = run_cmd([str(exe)], work_dir, timeout_sec=timeout_sec)
 
     res.sim_ran = True
+    res.sim_sec = run.get("sec", 0.0)
     res.sim_log = run.get("out", "")
     markers = parse_tb_markers(res.sim_log)
     res.equiv_pass = bool(run.get("ok") and markers["functional_pass"])

@@ -19,6 +19,7 @@ import hashlib
 import itertools
 import json
 import shutil
+import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -64,6 +65,8 @@ class IterationRecord:
     candidate_hash: str = ""
     analyst_source: str = ""
     log_tail: str = ""
+    # wall-clock seconds per step: repair_llm, compile, sim, yosys, sta, analyst_llm
+    timings: dict[str, float] = field(default_factory=dict)
 
 
 class RepairPipeline:
@@ -183,13 +186,16 @@ class RepairPipeline:
             self._log(f"iteration {i}/{self.cfg.max_iterations} ({phase})")
 
             # --- obtain candidate -------------------------------------------------
+            timings: dict[str, float] = {}
             if i == 1:
                 pass  # use the ingested input as-is
             else:
+                t0 = time.perf_counter()
                 rep = repairer_mod.repair(
                     self.client, self.cfg, self.spec, candidate_text,
                     analyst_feedback, analyst_feedback.get("_log_tail", ""), module_name,
                 )
+                timings["repair_llm"] = round(time.perf_counter() - t0, 3)
                 model_used = rep.get("model", "")
                 usage = rep.get("usage", {}) or {}
                 total_tokens += int(usage.get("total_tokens", 0))
@@ -248,13 +254,18 @@ class RepairPipeline:
                 candidate_path=str(candidate_path), candidate_hash=_sha(candidate_text),
                 log_tail=log_tail,
             )
+            rec.timings = {**timings, "compile": gate.compile_sec, "sim": gate.sim_sec,
+                           "yosys": synth.yosys_sec if synth else 0.0,
+                           "sta": synth.sta_sec if synth else 0.0}
 
             # --- analyst (only if continuing) ------------------------------------
             if decision != "ACCEPT":
+                t0 = time.perf_counter()
                 fb = analyst_mod.analyze(
                     self.client, self.cfg, candidate_text, log_tail, categories,
                     gate.compile_ok, synthesizable, gate.equiv_pass,
                 )
+                rec.timings["analyst_llm"] = round(time.perf_counter() - t0, 3)
                 fb["_log_tail"] = log_tail
                 analyst_feedback = fb
                 rec.analyst_source = fb.get("source", "")
